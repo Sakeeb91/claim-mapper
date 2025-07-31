@@ -48,23 +48,51 @@ export interface GraphNode {
   label: string;
   x?: number;
   y?: number;
+  vx?: number;
+  vy?: number;
+  fx?: number | null;
+  fy?: number | null;
   size: number;
   color: string;
+  group?: string;
+  confidence?: number;
   data: Claim | Evidence | ReasoningChain;
 }
 
 export interface GraphLink {
   id: string;
-  source: string;
-  target: string;
+  source: string | GraphNode;
+  target: string | GraphNode;
   type: 'supports' | 'contradicts' | 'relates' | 'reasoning';
   strength: number;
   label?: string;
+  curved?: boolean;
 }
 
 export interface GraphData {
   nodes: GraphNode[];
   links: GraphLink[];
+}
+
+export interface GraphLayout {
+  name: string;
+  label: string;
+  description: string;
+  forces: {
+    link?: { distance: number; strength: number };
+    charge?: { strength: number };
+    center?: { x: number; y: number };
+    collision?: { radius: number };
+  };
+}
+
+export interface GraphFilters {
+  nodeTypes: ('claim' | 'evidence' | 'reasoning')[];
+  confidenceRange: [number, number];
+  linkTypes: ('supports' | 'contradicts' | 'relates' | 'reasoning')[];
+  showLabels: boolean;
+  showIsolated: boolean;
+  groupBy?: 'type' | 'confidence' | 'author' | 'tag';
 }
 
 // Search and filtering types
@@ -141,8 +169,12 @@ export interface PaginatedResponse<T> extends ApiResponse<T[]> {
 export interface AppState {
   claims: Claim[];
   selectedClaim: string | null;
+  selectedNode: string | null;
   searchQuery: string;
+  graphSearchQuery: string;
   filters: SearchFilters;
+  graphFilters: GraphFilters;
+  graphLayout: GraphLayout;
   graphData: GraphData;
   collaborationSession: CollaborationSession | null;
   user: User | null;
@@ -165,4 +197,42 @@ export interface ClaimPanelProps {
 export interface SearchPanelProps {
   searchQuery: string;
   onSearchChange: (query: string) => void;
+}
+
+// Enhanced graph component props
+export interface KnowledgeGraphProps {
+  data: GraphData;
+  selectedNodeId?: string;
+  onNodeSelect: (nodeId: string) => void;
+  onNodeDoubleClick?: (nodeId: string) => void;
+  filters: GraphFilters;
+  layout: GraphLayout;
+  width?: number;
+  height?: number;
+  className?: string;
+}
+
+export interface GraphControlsProps {
+  filters: GraphFilters;
+  onFiltersChange: (filters: GraphFilters) => void;
+  layout: GraphLayout;
+  onLayoutChange: (layout: GraphLayout) => void;
+  searchQuery: string;
+  onSearchChange: (query: string) => void;
+  onResetView: () => void;
+  onExport?: () => void;
+}
+
+export interface NodeDetailsPanelProps {
+  nodeId: string | null;
+  onClose: () => void;
+  onEdit?: (nodeId: string) => void;
+  onConnect?: (sourceId: string, targetId: string) => void;
+}
+
+export interface ReasoningChainVisualizerProps {
+  reasoning: ReasoningChain;
+  onStepSelect?: (stepId: string) => void;
+  interactive?: boolean;
+  compact?: boolean;
 }
