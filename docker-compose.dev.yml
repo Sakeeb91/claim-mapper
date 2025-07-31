@@ -1,0 +1,97 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend.dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - BACKEND_API_URL=http://api:8000
+      - WEBSOCKET_URL=ws://websocket:8001
+    depends_on:
+      - api
+      - websocket
+
+  api:
+    build:
+      context: ./backend/api
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/api:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - MONGODB_URI=mongodb://mongo:27017/claim-mapper
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+      - FRONTEND_URL=http://localhost:3000
+    depends_on:
+      - mongo
+      - redis
+
+  websocket:
+    build:
+      context: ./backend/websocket
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./backend/websocket:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
+
+  ml-service:
+    build:
+      context: ./backend/ml
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./backend/ml:/app
+    environment:
+      - PYTHON_ENV=development
+      - MODEL_PATH=/app/models
+    depends_on:
+      - api
+
+  mongo:
+    image: mongo:7.0
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      - MONGO_INITDB_DATABASE=claim-mapper
+
+  redis:
+    image: redis:7.2-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.dev.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - frontend
+      - api
+
+volumes:
+  mongo_data:
+  redis_data:
