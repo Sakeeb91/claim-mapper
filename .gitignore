@@ -56,4 +56,4 @@ backend/logs/
 
 # Temporary files
 tmp/
-temp/
+temp/backend/ml/__pycache__/
