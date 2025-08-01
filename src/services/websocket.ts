@@ -1,127 +1,389 @@
 import { io, Socket } from 'socket.io-client';
+import { useAppStore } from '@/store/useAppStore';
 
 export class WebSocketService {
   private socket: Socket | null = null;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
+  private reconnectDelay = 1000;
 
-  connect(userId?: string): void {
-    if (this.socket?.connected) return;
-
-    const url = process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'ws://localhost:8001';
-    
-    this.socket = io(url, {
-      transports: ['websocket'],
-      auth: {
-        userId: userId || 'anonymous',
-      },
-    });
-
-    this.setupEventHandlers();
+  constructor() {
+    this.setupEventListeners();
   }
 
-  disconnect(): void {
+  connect(token: string, url: string = process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'http://localhost:3001') {
+    if (this.socket?.connected) {
+      return this.socket;
+    }
+
+    this.socket = io(url, {
+      auth: { token },
+      transports: ['websocket', 'polling'],
+      timeout: 20000,
+      reconnection: true,
+      reconnectionAttempts: this.maxReconnectAttempts,
+      reconnectionDelay: this.reconnectDelay,
+    });
+
+    this.setupSocketEventListeners();
+    return this.socket;
+  }
+
+  disconnect() {
     if (this.socket) {
       this.socket.disconnect();
       this.socket = null;
     }
   }
 
-  private setupEventHandlers(): void {
+  emit(event: string, data: any) {
+    if (this.socket?.connected) {
+      this.socket.emit(event, data);
+    } else {
+      console.warn('Socket not connected, cannot emit event:', event);
+    }
+  }
+
+  private setupEventListeners() {
+    if (typeof window !== 'undefined') {
+      // Handle page visibility changes
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+          this.handlePageHidden();
+        } else {
+          this.handlePageVisible();
+        }
+      });
+
+      // Handle window focus/blur
+      window.addEventListener('focus', this.handlePageVisible.bind(this));
+      window.addEventListener('blur', this.handlePageHidden.bind(this));
+
+      // Handle beforeunload
+      window.addEventListener('beforeunload', () => {
+        this.disconnect();
+      });
+    }
+  }
+
+  private setupSocketEventListeners() {
     if (!this.socket) return;
 
+    const store = useAppStore.getState();
+
+    // Connection events
     this.socket.on('connect', () => {
       console.log('WebSocket connected');
       this.reconnectAttempts = 0;
+      store.setConnectionStatus(true, false);
     });
 
     this.socket.on('disconnect', (reason) => {
       console.log('WebSocket disconnected:', reason);
+      store.setConnectionStatus(false, false);
+      
+      if (reason === 'io client disconnect') {
+        // Manual disconnect, don't reconnect
+        return;
+      }
+
+      // Auto-reconnect logic
       this.handleReconnection();
     });
 
     this.socket.on('connect_error', (error) => {
       console.error('WebSocket connection error:', error);
+      store.setConnectionStatus(false, false);
       this.handleReconnection();
+    });
+
+    this.socket.on('reconnect', (attemptNumber) => {
+      console.log('WebSocket reconnected after', attemptNumber, 'attempts');
+      this.reconnectAttempts = 0;
+      store.setConnectionStatus(true, false);
+    });
+
+    this.socket.on('reconnect_attempt', (attemptNumber) => {
+      console.log('WebSocket reconnection attempt:', attemptNumber);
+      store.setConnectionStatus(false, true);
+    });
+
+    this.socket.on('reconnect_failed', () => {
+      console.error('WebSocket reconnection failed after max attempts');
+      store.setConnectionStatus(false, false);
+      store.setError('Connection lost. Please refresh the page.');
+    });
+
+    // Application-specific events
+    this.setupApplicationEventListeners();
+  }
+
+  private setupApplicationEventListeners() {
+    if (!this.socket) return;
+
+    const store = useAppStore.getState();
+
+    // User presence events
+    this.socket.on('user_joined_project', (data) => {
+      const userPresence = {
+        userId: data.userId,
+        user: data.user,
+        lastUpdate: new Date(data.timestamp),
+        activity: 'viewing' as const
+      };
+      
+      const currentUsers = store.activeUsers.filter(u => u.userId !== data.userId);
+      store.setActiveUsers([...currentUsers, userPresence]);
+    });
+
+    this.socket.on('user_left_project', (data) => {
+      store.removeUser(data.userId);
+    });
+
+    this.socket.on('cursor_update', (data) => {
+      store.updateUserPresence(data.userId, {
+        cursor: {
+          x: data.position.x,
+          y: data.position.y,
+          elementId: data.elementId,
+          selection: data.selection
+        },
+        lastUpdate: new Date()
+      });
+    });
+
+    // Claim editing events
+    this.socket.on('claim_edit_started', (data) => {
+      store.addNotification({
+        id: `edit_${data.claimId}_${Date.now()}`,
+        type: 'system',
+        title: 'Claim Being Edited',
+        message: `${data.user.name} started editing a claim`,
+        userId: data.userId,
+        read: false,
+        createdAt: new Date(),
+        priority: 'low'
+      });
+
+      // Update user activity
+      store.updateUserPresence(data.userId, {
+        activity: 'editing',
+        lastUpdate: new Date()
+      });
+    });
+
+    this.socket.on('claim_edit_update', (data) => {
+      // Handle real-time claim updates
+      store.updateClaim(data.claimId, data.changes);
+      
+      store.addChangeEvent({
+        id: `change_${Date.now()}`,
+        type: 'update',
+        entityType: 'claim',
+        entityId: data.claimId,
+        userId: data.userId,
+        user: data.user,
+        changes: data.changes,
+        timestamp: new Date()
+      });
+    });
+
+    this.socket.on('claim_edit_ended', (data) => {
+      store.updateUserPresence(data.userId, {
+        activity: 'viewing',
+        lastUpdate: new Date()
+      });
+
+      if (data.forced) {
+        store.addNotification({
+          id: `edit_end_${data.claimId}_${Date.now()}`,
+          type: 'system',
+          title: 'Edit Session Ended',
+          message: `Edit session for claim ended: ${data.reason || 'User disconnected'}`,
+          userId: data.userId,
+          read: false,
+          createdAt: new Date(),
+          priority: 'medium'
+        });
+      }
+    });
+
+    this.socket.on('claim_edit_conflict', (data) => {
+      store.addConflict({
+        id: `conflict_${Date.now()}`,
+        conflictType: 'concurrent_edit',
+        entityId: data.claimId,
+        conflictingUsers: [data.currentEditor],
+        proposedResolution: 'manual_review',
+        status: 'pending',
+        createdAt: new Date()
+      });
+
+      store.addNotification({
+        id: `conflict_${data.claimId}_${Date.now()}`,
+        type: 'conflict',
+        title: 'Edit Conflict',
+        message: data.message,
+        userId: data.currentEditor,
+        read: false,
+        createdAt: new Date(),
+        priority: 'high'
+      });
+    });
+
+    // Comment events
+    this.socket.on('comment_added', (data) => {
+      store.addComment(data.comment);
+      
+      store.addNotification({
+        id: `comment_${data.comment.id}_${Date.now()}`,
+        type: 'comment',
+        title: 'New Comment',
+        message: `${data.comment.author.name} added a comment`,
+        userId: data.comment.author.id,
+        read: false,
+        createdAt: new Date(),
+        priority: 'medium'
+      });
+    });
+
+    this.socket.on('comment_updated', (data) => {
+      store.updateComment(data.comment.id, data.comment);
+    });
+
+    this.socket.on('comment_resolved', (data) => {
+      store.resolveComment(data.commentId);
+    });
+
+    // Validation events
+    this.socket.on('validation_submitted', (data) => {
+      store.updateValidationResult(data.claimId, data.validationResult);
+      
+      store.addNotification({
+        id: `validation_${data.claimId}_${Date.now()}`,
+        type: 'validation',
+        title: 'New Validation',
+        message: `${data.validator.name} submitted a validation`,
+        userId: data.validator.id,
+        read: false,
+        createdAt: new Date(),
+        priority: 'medium'
+      });
+    });
+
+    // Session events
+    this.socket.on('session_joined', (data) => {
+      store.setActiveUsers(data.activeUsers);
+    });
+
+    this.socket.on('session_chat', (data) => {
+      // Handle chat messages if needed
+      console.log('Chat message:', data);
+    });
+
+    // Error handling
+    this.socket.on('error', (data) => {
+      console.error('WebSocket error:', data);
+      store.setError(data.message || 'An error occurred');
+    });
+
+    // Ping/pong for connection health
+    this.socket.on('pong', (data) => {
+      // Connection is healthy
+      console.debug('Pong received:', data);
     });
   }
 
-  private handleReconnection(): void {
-    if (this.reconnectAttempts < this.maxReconnectAttempts) {
-      this.reconnectAttempts++;
-      setTimeout(() => {
-        this.socket?.connect();
-      }, Math.pow(2, this.reconnectAttempts) * 1000);
+  private handleReconnection() {
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.error('Max reconnection attempts reached');
+      return;
+    }
+
+    this.reconnectAttempts++;
+    const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
+    
+    console.log(`Attempting to reconnect in ${delay}ms (attempt ${this.reconnectAttempts})`);
+    
+    setTimeout(() => {
+      if (this.socket && !this.socket.connected) {
+        this.socket.connect();
+      }
+    }, delay);
+  }
+
+  private handlePageHidden() {
+    // Reduce activity when page is hidden
+    if (this.socket?.connected) {
+      this.socket.emit('activity_update', {
+        type: 'page_hidden',
+        details: { timestamp: new Date() }
+      });
     }
   }
 
-  // Collaboration events
-  joinDocument(documentId: string): void {
-    this.socket?.emit('join-document', documentId);
+  private handlePageVisible() {
+    // Resume activity when page becomes visible
+    if (this.socket?.connected) {
+      this.socket.emit('activity_update', {
+        type: 'page_visible',
+        details: { timestamp: new Date() }
+      });
+    }
   }
 
-  leaveDocument(documentId: string): void {
-    this.socket?.emit('leave-document', documentId);
+  // Public methods for specific actions
+  public joinProject(projectId: string) {
+    this.emit('join_project', { projectId });
   }
 
-  sendCursorPosition(documentId: string, position: { line: number; column: number }): void {
-    this.socket?.emit('cursor-position', { documentId, position });
+  public leaveProject(projectId: string) {
+    this.emit('leave_project', { projectId });
   }
 
-  sendTextChange(documentId: string, change: { text: string; position: number }): void {
-    this.socket?.emit('text-change', { documentId, change });
+  public startEditingClaim(claimId: string, projectId: string) {
+    this.emit('claim_edit_start', { claimId, projectId });
   }
 
-  sendComment(documentId: string, comment: { text: string; position: { x: number; y: number } }): void {
-    this.socket?.emit('new-comment', { documentId, comment });
+  public updateClaimEdit(claimId: string, projectId: string, changes: any, cursorPosition?: number) {
+    this.emit('claim_edit_update', {
+      claimId,
+      projectId,
+      changes,
+      cursorPosition
+    });
   }
 
-  // Event listeners
-  onUserJoined(callback: (user: { id: string; name: string }) => void): void {
-    this.socket?.on('user-joined', callback);
+  public stopEditingClaim(claimId: string, projectId: string, save: boolean = true) {
+    this.emit('claim_edit_end', { claimId, projectId, save });
   }
 
-  onUserLeft(callback: (userId: string) => void): void {
-    this.socket?.on('user-left', callback);
+  public updateCursor(projectId: string, elementId: string, position: { x: number; y: number }, selection?: { start: number; end: number }) {
+    this.emit('cursor_update', {
+      projectId,
+      elementId,
+      position,
+      selection
+    });
   }
 
-  onCursorPositionUpdate(callback: (data: { userId: string; position: { line: number; column: number } }) => void): void {
-    this.socket?.on('cursor-position-update', callback);
+  public sendChatMessage(sessionId: string, message: string) {
+    this.emit('session_chat', { sessionId, message });
   }
 
-  onTextChangeUpdate(callback: (data: { userId: string; change: { text: string; position: number } }) => void): void {
-    this.socket?.on('text-change-update', callback);
+  public pingServer() {
+    this.emit('ping');
   }
 
-  onNewComment(callback: (comment: { id: string; text: string; author: string; position: { x: number; y: number } }) => void): void {
-    this.socket?.on('comment-added', callback);
-  }
-
-  // Graph collaboration events
-  onGraphNodeUpdate(callback: (data: { nodeId: string; updates: Record<string, unknown> }) => void): void {
-    this.socket?.on('graph-node-update', callback);
-  }
-
-  onGraphLinkUpdate(callback: (data: { linkId: string; updates: Record<string, unknown> }) => void): void {
-    this.socket?.on('graph-link-update', callback);
-  }
-
-  sendGraphNodeUpdate(nodeId: string, updates: Record<string, unknown>): void {
-    this.socket?.emit('update-graph-node', { nodeId, updates });
-  }
-
-  sendGraphLinkUpdate(linkId: string, updates: Record<string, unknown>): void {
-    this.socket?.emit('update-graph-link', { linkId, updates });
-  }
-
-  // Utility methods
-  isConnected(): boolean {
-    return this.socket?.connected || false;
-  }
-
-  getSocketId(): string | undefined {
-    return this.socket?.id;
+  // Start periodic ping to keep connection alive
+  public startHealthCheck(interval: number = 30000) {
+    setInterval(() => {
+      if (this.socket?.connected) {
+        this.pingServer();
+      }
+    }, interval);
   }
 }
 
+// Singleton instance
 export const websocketService = new WebSocketService();

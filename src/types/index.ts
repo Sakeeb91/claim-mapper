@@ -126,6 +126,9 @@ export interface User {
   email: string;
   avatar?: string;
   role: 'viewer' | 'editor' | 'admin';
+  status?: 'online' | 'offline' | 'away';
+  lastSeen?: Date;
+  color?: string;
 }
 
 export interface CollaborationSession {
@@ -134,6 +137,8 @@ export interface CollaborationSession {
   documentId: string;
   createdAt: Date;
   lastActivity: Date;
+  activeEditors: string[];
+  editorLocks: Record<string, string>; // elementId -> userId
 }
 
 export interface Comment {
@@ -146,6 +151,87 @@ export interface Comment {
   createdAt: Date;
   resolved: boolean;
   replies: Comment[];
+  thread?: string;
+  reactions: CommentReaction[];
+}
+
+export interface CommentReaction {
+  id: string;
+  userId: string;
+  type: 'like' | 'dislike' | 'agree' | 'disagree';
+  createdAt: Date;
+}
+
+export interface UserPresence {
+  userId: string;
+  user: User;
+  cursor?: {
+    x: number;
+    y: number;
+    elementId?: string;
+    selection?: { start: number; end: number };
+  };
+  lastUpdate: Date;
+  activity: 'viewing' | 'editing' | 'commenting';
+}
+
+export interface ValidationSubmission {
+  id: string;
+  claimId: string;
+  validatorId: string;
+  validator: User;
+  score: number; // 0-100
+  confidence: number; // 0-1
+  feedback: string;
+  category: 'accuracy' | 'relevance' | 'completeness' | 'clarity';
+  status: 'pending' | 'approved' | 'rejected';
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ValidationResult {
+  claimId: string;
+  overallScore: number;
+  consensus: number; // 0-1
+  submissions: ValidationSubmission[];
+  expertReviews: ExpertReview[];
+  communityScore: number;
+  lastValidated: Date;
+}
+
+export interface ExpertReview {
+  id: string;
+  expertId: string;
+  expert: User & { expertise: string[]; verified: boolean };
+  claimId: string;
+  verdict: 'verified' | 'disputed' | 'needs_more_evidence';
+  reasoning: string;
+  confidence: number;
+  createdAt: Date;
+}
+
+export interface ChangeEvent {
+  id: string;
+  type: 'create' | 'update' | 'delete' | 'comment' | 'validate';
+  entityType: 'claim' | 'evidence' | 'reasoning' | 'comment';
+  entityId: string;
+  userId: string;
+  user: User;
+  changes: Record<string, any>;
+  timestamp: Date;
+  sessionId?: string;
+}
+
+export interface ConflictResolution {
+  id: string;
+  conflictType: 'concurrent_edit' | 'version_mismatch' | 'permission_conflict';
+  entityId: string;
+  conflictingUsers: User[];
+  proposedResolution: 'merge' | 'overwrite' | 'manual_review';
+  status: 'pending' | 'resolved' | 'escalated';
+  createdAt: Date;
+  resolvedAt?: Date;
+  resolvedBy?: string;
 }
 
 // API response types
@@ -180,6 +266,28 @@ export interface AppState {
   user: User | null;
   loading: boolean;
   error: string | null;
+  // Enhanced collaboration state
+  activeUsers: UserPresence[];
+  comments: Comment[];
+  validationResults: Record<string, ValidationResult>;
+  changeHistory: ChangeEvent[];
+  conflicts: ConflictResolution[];
+  isConnected: boolean;
+  reconnecting: boolean;
+  editingClaim: string | null;
+  notifications: Notification[];
+}
+
+export interface Notification {
+  id: string;
+  type: 'comment' | 'validation' | 'conflict' | 'mention' | 'system';
+  title: string;
+  message: string;
+  userId: string;
+  read: boolean;
+  actionUrl?: string;
+  createdAt: Date;
+  priority: 'low' | 'medium' | 'high';
 }
 
 // Component props types

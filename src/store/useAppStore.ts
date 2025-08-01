@@ -1,6 +1,21 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
-import { AppState, Claim, GraphData, GraphFilters, GraphLayout, SearchFilters } from '@/types';
+import { 
+  AppState, 
+  Claim, 
+  GraphData, 
+  GraphFilters, 
+  GraphLayout, 
+  SearchFilters,
+  User,
+  UserPresence,
+  Comment,
+  ValidationResult,
+  ChangeEvent,
+  ConflictResolution,
+  Notification
+} from '@/types';
+import { io, Socket } from 'socket.io-client';
 
 interface AppActions {
   // Claims
@@ -32,6 +47,49 @@ interface AppActions {
   searchInGraph: (query: string) => void;
   resetGraphView: () => void;
   connectNodes: (sourceId: string, targetId: string, type: string) => Promise<void>;
+  
+  // WebSocket and Collaboration
+  socket: Socket | null;
+  initializeWebSocket: (token: string) => void;
+  disconnectWebSocket: () => void;
+  joinProject: (projectId: string) => void;
+  leaveProject: (projectId: string) => void;
+  
+  // User Presence
+  setActiveUsers: (users: UserPresence[]) => void;
+  updateUserPresence: (userId: string, presence: Partial<UserPresence>) => void;
+  removeUser: (userId: string) => void;
+  
+  // Comments
+  setComments: (comments: Comment[]) => void;
+  addComment: (comment: Comment) => void;
+  updateComment: (id: string, updates: Partial<Comment>) => void;
+  deleteComment: (id: string) => void;
+  resolveComment: (id: string) => void;
+  
+  // Validation
+  setValidationResults: (results: Record<string, ValidationResult>) => void;
+  updateValidationResult: (claimId: string, result: ValidationResult) => void;
+  
+  // Change History
+  addChangeEvent: (event: ChangeEvent) => void;
+  setChangeHistory: (history: ChangeEvent[]) => void;
+  
+  // Conflicts
+  addConflict: (conflict: ConflictResolution) => void;
+  resolveConflict: (conflictId: string, resolution: any) => void;
+  
+  // Editing
+  startEditingClaim: (claimId: string) => Promise<void>;
+  stopEditingClaim: (claimId: string, save?: boolean) => Promise<void>;
+  
+  // Notifications
+  addNotification: (notification: Notification) => void;
+  markNotificationRead: (notificationId: string) => void;
+  clearNotifications: () => void;
+  
+  // Connection status
+  setConnectionStatus: (connected: boolean, reconnecting?: boolean) => void;
 }
 
 const initialGraphFilters: GraphFilters = {
@@ -69,6 +127,16 @@ const initialState: AppState = {
   user: null,
   loading: false,
   error: null,
+  // Enhanced collaboration state
+  activeUsers: [],
+  comments: [],
+  validationResults: {},
+  changeHistory: [],
+  conflicts: [],
+  isConnected: false,
+  reconnecting: false,
+  editingClaim: null,
+  notifications: [],
 };
 
 export const useAppStore = create<AppState & AppActions>()(
@@ -276,9 +344,270 @@ export const useAppStore = create<AppState & AppActions>()(
           set({ loading: false });
         }
       },
+      
+      // WebSocket and Collaboration
+      socket: null,
+      
+      initializeWebSocket: (token: string) => {
+        const { socket: currentSocket } = get();
+        if (currentSocket) {
+          currentSocket.disconnect();
+        }
+        
+        const newSocket = io(process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'http://localhost:3001', {
+          auth: { token },
+          transports: ['websocket', 'polling'],
+        });
+        
+        // Connection events
+        newSocket.on('connect', () => {
+          console.log('WebSocket connected');
+          set({ isConnected: true, reconnecting: false });
+        });
+        
+        newSocket.on('disconnect', (reason) => {
+          console.log('WebSocket disconnected:', reason);
+          set({ isConnected: false });
+        });
+        
+        newSocket.on('reconnect_attempt', () => {
+          set({ reconnecting: true });
+        });
+        
+        // User presence events
+        newSocket.on('user_joined_project', (data) => {
+          const { activeUsers } = get();
+          const userPresence: UserPresence = {
+            userId: data.userId,
+            user: data.user,
+            lastUpdate: new Date(data.timestamp),
+            activity: 'viewing'
+          };
+          set({ activeUsers: [...activeUsers.filter(u => u.userId !== data.userId), userPresence] });
+        });
+        
+        newSocket.on('user_left_project', (data) => {
+          const { activeUsers } = get();
+          set({ activeUsers: activeUsers.filter(u => u.userId !== data.userId) });
+        });
+        
+        newSocket.on('cursor_update', (data) => {
+          const { updateUserPresence } = get();
+          updateUserPresence(data.userId, {
+            cursor: {
+              x: data.position.x,
+              y: data.position.y,
+              elementId: data.elementId,
+              selection: data.selection
+            },
+            lastUpdate: new Date()
+          });
+        });
+        
+        // Claim editing events
+        newSocket.on('claim_edit_started', (data) => {
+          const { addNotification } = get();
+          addNotification({
+            id: `edit_${data.claimId}_${Date.now()}`,
+            type: 'system',
+            title: 'Claim Being Edited',
+            message: `${data.user.name} started editing a claim`,
+            userId: data.userId,
+            read: false,
+            createdAt: new Date(),
+            priority: 'low'
+          });
+        });
+        
+        newSocket.on('claim_edit_update', (data) => {
+          // Handle real-time claim updates
+          const { updateClaim, addChangeEvent } = get();
+          updateClaim(data.claimId, data.changes);
+          
+          addChangeEvent({
+            id: `change_${Date.now()}`,
+            type: 'update',
+            entityType: 'claim',
+            entityId: data.claimId,
+            userId: data.userId,
+            user: data.user,
+            changes: data.changes,
+            timestamp: new Date()
+          });
+        });
+        
+        newSocket.on('claim_edit_conflict', (data) => {
+          const { addConflict } = get();
+          addConflict({
+            id: `conflict_${Date.now()}`,
+            conflictType: 'concurrent_edit',
+            entityId: data.claimId,
+            conflictingUsers: [data.currentEditor],
+            proposedResolution: 'manual_review',
+            status: 'pending',
+            createdAt: new Date()
+          });
+        });
+        
+        // Comment events
+        newSocket.on('comment_added', (data) => {
+          const { addComment } = get();
+          addComment(data.comment);
+        });
+        
+        set({ socket: newSocket });
+      },
+      
+      disconnectWebSocket: () => {
+        const { socket } = get();
+        if (socket) {
+          socket.disconnect();
+          set({ socket: null, isConnected: false });
+        }
+      },
+      
+      joinProject: (projectId: string) => {
+        const { socket } = get();
+        if (socket) {
+          socket.emit('join_project', { projectId });
+        }
+      },
+      
+      leaveProject: (projectId: string) => {
+        const { socket } = get();
+        if (socket) {
+          socket.emit('leave_project', { projectId });
+        }
+      },
+      
+      // User Presence
+      setActiveUsers: (users) => set({ activeUsers: users }),
+      
+      updateUserPresence: (userId, presence) => {
+        const { activeUsers } = get();
+        const updatedUsers = activeUsers.map(user => 
+          user.userId === userId 
+            ? { ...user, ...presence, lastUpdate: new Date() }
+            : user
+        );
+        set({ activeUsers: updatedUsers });
+      },
+      
+      removeUser: (userId) => {
+        const { activeUsers } = get();
+        set({ activeUsers: activeUsers.filter(u => u.userId !== userId) });
+      },
+      
+      // Comments
+      setComments: (comments) => set({ comments }),
+      
+      addComment: (comment) => {
+        const { comments } = get();
+        set({ comments: [...comments, comment] });
+      },
+      
+      updateComment: (id, updates) => {
+        const { comments } = get();
+        set({
+          comments: comments.map(comment =>
+            comment.id === id ? { ...comment, ...updates } : comment
+          )
+        });
+      },
+      
+      deleteComment: (id) => {
+        const { comments } = get();
+        set({ comments: comments.filter(c => c.id !== id) });
+      },
+      
+      resolveComment: (id) => {
+        const { updateComment } = get();
+        updateComment(id, { resolved: true });
+      },
+      
+      // Validation
+      setValidationResults: (results) => set({ validationResults: results }),
+      
+      updateValidationResult: (claimId, result) => {
+        const { validationResults } = get();
+        set({
+          validationResults: {
+            ...validationResults,
+            [claimId]: result
+          }
+        });
+      },
+      
+      // Change History
+      addChangeEvent: (event) => {
+        const { changeHistory } = get();
+        set({ changeHistory: [event, ...changeHistory.slice(0, 99)] }); // Keep last 100 events
+      },
+      
+      setChangeHistory: (history) => set({ changeHistory: history }),
+      
+      // Conflicts
+      addConflict: (conflict) => {
+        const { conflicts } = get();
+        set({ conflicts: [conflict, ...conflicts] });
+      },
+      
+      resolveConflict: (conflictId, resolution) => {
+        const { conflicts } = get();
+        set({
+          conflicts: conflicts.map(conflict =>
+            conflict.id === conflictId
+              ? { ...conflict, status: 'resolved', resolvedAt: new Date() }
+              : conflict
+          )
+        });
+      },
+      
+      // Editing
+      startEditingClaim: async (claimId) => {
+        const { socket } = get();
+        if (socket) {
+          socket.emit('claim_edit_start', { claimId, projectId: 'current-project' });
+          set({ editingClaim: claimId });
+        }
+      },
+      
+      stopEditingClaim: async (claimId, save = true) => {
+        const { socket } = get();
+        if (socket) {
+          socket.emit('claim_edit_end', { claimId, projectId: 'current-project', save });
+          set({ editingClaim: null });
+        }
+      },
+      
+      // Notifications
+      addNotification: (notification) => {
+        const { notifications } = get();
+        set({ notifications: [notification, ...notifications] });
+      },
+      
+      markNotificationRead: (notificationId) => {
+        const { notifications } = get();
+        set({
+          notifications: notifications.map(n =>
+            n.id === notificationId ? { ...n, read: true } : n
+          )
+        });
+      },
+      
+      clearNotifications: () => set({ notifications: [] }),
+      
+      // Connection status
+      setConnectionStatus: (connected, reconnecting = false) => {
+        set({ isConnected: connected, reconnecting });
+      },
     }),
     {
       name: 'claim-mapper-store',
+      partialize: (state) => ({
+        user: state.user,
+        // Don't persist real-time collaboration data
+      }),
     }
   )
 );

@@ -7,10 +7,10 @@ import { clsx } from 'clsx';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: Home },
-  { name: 'Graph View', href: '/graph', icon: Graph },
+  { name: 'Explore', href: '/explore', icon: Graph },
   { name: 'Search', href: '/search', icon: Search },
   { name: 'Editor', href: '/editor', icon: Edit },
-  { name: 'Collaboration', href: '/collaboration', icon: Users },
+  { name: 'Collaborate', href: '/collaborate', icon: Users },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
 
