@@ -78,7 +78,8 @@ router.get('/',
     }
     
     // Check cache
-    const cacheKey = `projects:user:${userId}:${JSON.stringify({ query, page, limit, sort, order })}`;\n    const cachedResult = await redisManager.get(cacheKey);
+    const cacheKey = `projects:user:${userId}:${JSON.stringify({ query, page, limit, sort, order })}`;
+    const cachedResult = await redisManager.get(cacheKey);
     if (cachedResult) {
       res.json({
         success: true,
@@ -294,5 +295,399 @@ router.delete('/:id',
       project.updateOne({ isActive: false, status: 'archived' }),
       Claim.updateMany({ project: id }, { isActive: false, status: 'archived' }),
       Evidence.updateMany({ project: id }, { isActive: false }),
-    ]);\n    
-    // Clear caches\n    await redisManager.deletePattern(`projects:*`);\n    await redisManager.deletePattern(`claims:*`);\n    \n    logger.info(`Project deleted: ${project._id} by ${req.user!.email}`);\n    \n    res.json({\n      success: true,\n      message: 'Project deleted successfully',\n    });\n  })\n);\n\n// POST /api/projects/:id/collaborators - Invite collaborator\nrouter.post('/:id/collaborators',\n  authenticate,\n  sanitize,\n  validate(validationSchemas.objectId, 'params'),\n  validate(validationSchemas.inviteCollaborator),\n  asyncHandler(async (req: Request, res: Response) => {\n    const { id } = req.params;\n    const { email, role, message } = req.body;\n    const userId = req.user!._id.toString();\n    \n    const project = await Project.findOne({ _id: id, isActive: true });\n    \n    if (!project) {\n      throw createError('Project not found', 404, 'PROJECT_NOT_FOUND');\n    }\n    \n    // Check invite permissions\n    const canInvite = project.owner.toString() === userId ||\n      project.collaborators.some(c => \n        c.user.toString() === userId && c.permissions.canInvite\n      );\n      \n    if (!canInvite) {\n      throw createError('No permission to invite collaborators', 403, 'INVITE_PERMISSION_DENIED');\n    }\n    \n    // Find user to invite\n    const userToInvite = await User.findOne({ \n      email: email.toLowerCase(),\n      isActive: true \n    });\n    \n    if (!userToInvite) {\n      throw createError('User not found', 404, 'USER_NOT_FOUND');\n    }\n    \n    // Check if already collaborator\n    const isOwner = project.owner.toString() === userToInvite._id.toString();\n    const isCollaborator = project.collaborators.some(c => \n      c.user.toString() === userToInvite._id.toString()\n    );\n    \n    if (isOwner) {\n      throw createError('User is already the project owner', 400, 'ALREADY_OWNER');\n    }\n    \n    if (isCollaborator) {\n      throw createError('User is already a collaborator', 400, 'ALREADY_COLLABORATOR');\n    }\n    \n    // Add collaborator\n    await project.addCollaborator(userToInvite._id.toString(), role, userId);\n    \n    // Re-populate\n    await project.populate('collaborators.user', 'firstName lastName email');\n    \n    // TODO: Send invitation email\n    // await sendInvitationEmail(userToInvite.email, project.name, message);\n    \n    logger.info(`Collaborator invited: ${userToInvite.email} to project ${project._id}`);\n    \n    res.status(201).json({\n      success: true,\n      message: 'Collaborator invited successfully',\n      data: {\n        collaborator: project.collaborators[project.collaborators.length - 1],\n      },\n    });\n  })\n);\n\n// PUT /api/projects/:id/collaborators/:userId - Update collaborator role\nrouter.put('/:id/collaborators/:userId',\n  authenticate,\n  validate(validationSchemas.objectId, 'params'),\n  asyncHandler(async (req: Request, res: Response) => {\n    const { id, userId: collaboratorId } = req.params;\n    const { role } = req.body;\n    const userId = req.user!._id.toString();\n    \n    if (!['viewer', 'editor', 'admin'].includes(role)) {\n      throw createError('Invalid role', 400, 'INVALID_ROLE');\n    }\n    \n    const project = await Project.findOne({ _id: id, isActive: true });\n    \n    if (!project) {\n      throw createError('Project not found', 404, 'PROJECT_NOT_FOUND');\n    }\n    \n    // Only owner can change roles\n    if (project.owner.toString() !== userId) {\n      throw createError('Only project owner can change collaborator roles', 403, 'ROLE_CHANGE_PERMISSION_DENIED');\n    }\n    \n    // Find collaborator\n    const collaborator = project.collaborators.find(c => \n      c.user.toString() === collaboratorId\n    );\n    \n    if (!collaborator) {\n      throw createError('Collaborator not found', 404, 'COLLABORATOR_NOT_FOUND');\n    }\n    \n    // Update role and permissions\n    collaborator.role = role;\n    collaborator.permissions = {\n      canEdit: role === 'editor' || role === 'admin',\n      canDelete: role === 'admin',\n      canInvite: role === 'admin',\n      canExport: true,\n      canManageSettings: role === 'admin',\n    };\n    \n    await project.save();\n    \n    res.json({\n      success: true,\n      message: 'Collaborator role updated successfully',\n      data: { collaborator },\n    });\n  })\n);\n\n// DELETE /api/projects/:id/collaborators/:userId - Remove collaborator\nrouter.delete('/:id/collaborators/:userId',\n  authenticate,\n  validate(validationSchemas.objectId, 'params'),\n  asyncHandler(async (req: Request, res: Response) => {\n    const { id, userId: collaboratorId } = req.params;\n    const userId = req.user!._id.toString();\n    \n    const project = await Project.findOne({ _id: id, isActive: true });\n    \n    if (!project) {\n      throw createError('Project not found', 404, 'PROJECT_NOT_FOUND');\n    }\n    \n    // Owner can remove anyone, collaborators can remove themselves\n    const canRemove = project.owner.toString() === userId ||\n      collaboratorId === userId;\n      \n    if (!canRemove) {\n      throw createError('No permission to remove this collaborator', 403, 'REMOVE_PERMISSION_DENIED');\n    }\n    \n    // Remove collaborator\n    await project.removeCollaborator(collaboratorId);\n    \n    res.json({\n      success: true,\n      message: 'Collaborator removed successfully',\n    });\n  })\n);\n\n// POST /api/projects/:id/documents - Upload document\nrouter.post('/:id/documents',\n  authenticate,\n  validate(validationSchemas.objectId, 'params'),\n  upload.single('document'),\n  validateFile({\n    required: true,\n    maxSize: 50 * 1024 * 1024, // 50MB\n    allowedTypes: [\n      'application/pdf',\n      'application/msword',\n      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',\n      'text/plain',\n      'text/html',\n      'application/rtf'\n    ],\n  }),\n  asyncHandler(async (req: Request, res: Response) => {\n    const { id } = req.params;\n    const file = req.file!;\n    const userId = req.user!._id.toString();\n    \n    const project = await Project.findOne({ _id: id, isActive: true });\n    \n    if (!project) {\n      throw createError('Project not found', 404, 'PROJECT_NOT_FOUND');\n    }\n    \n    // Check upload permissions\n    const canUpload = project.owner.toString() === userId ||\n      project.collaborators.some(c => \n        c.user.toString() === userId && c.permissions.canEdit\n      );\n      \n    if (!canUpload) {\n      throw createError('No permission to upload documents', 403, 'UPLOAD_PERMISSION_DENIED');\n    }\n    \n    // Add document to project\n    const document = {\n      filename: file.filename,\n      originalName: file.originalname,\n      mimetype: file.mimetype,\n      size: file.size,\n      path: file.path,\n      uploadedBy: req.user!._id,\n      uploadedAt: new Date(),\n      processed: false,\n      extractedClaims: 0,\n      metadata: {\n        encoding: file.encoding,\n      },\n    };\n    \n    project.documents.push(document);\n    await project.save();\n    \n    // TODO: Queue document for processing\n    // await queueDocumentProcessing(project._id.toString(), document);\n    \n    logger.info(`Document uploaded: ${file.originalname} to project ${project._id}`);\n    \n    res.status(201).json({\n      success: true,\n      message: 'Document uploaded successfully',\n      data: { document },\n    });\n  })\n);\n\n// GET /api/projects/:id/analytics - Get project analytics\nrouter.get('/:id/analytics',\n  authenticate,\n  validate(validationSchemas.objectId, 'params'),\n  asyncHandler(async (req: Request, res: Response) => {\n    const { id } = req.params;\n    const userId = req.user!._id.toString();\n    \n    const project = await Project.findOne({ _id: id, isActive: true });\n    \n    if (!project) {\n      throw createError('Project not found', 404, 'PROJECT_NOT_FOUND');\n    }\n    \n    // Check access permissions\n    const hasAccess = project.owner.toString() === userId ||\n      project.collaborators.some(c => c.user.toString() === userId);\n      \n    if (!hasAccess) {\n      throw createError('Access denied to project', 403, 'PROJECT_ACCESS_DENIED');\n    }\n    \n    // Check cache\n    const cacheKey = `analytics:project:${id}`;\n    const cachedAnalytics = await redisManager.get(cacheKey);\n    if (cachedAnalytics) {\n      res.json({\n        success: true,\n        data: cachedAnalytics,\n        cached: true,\n      });\n      return;\n    }\n    \n    // Get analytics data\n    const [claimsStats, evidenceStats, qualityStats] = await Promise.all([\n      Claim.aggregate([\n        { $match: { project: project._id, isActive: true } },\n        {\n          $group: {\n            _id: null,\n            total: { $sum: 1 },\n            byType: {\n              $push: {\n                type: '$type',\n                confidence: '$confidence',\n                status: '$status'\n              }\n            },\n            avgConfidence: { $avg: '$confidence' },\n            avgQuality: { $avg: '$quality.overallScore' }\n          }\n        }\n      ]),\n      \n      Evidence.aggregate([\n        { $match: { project: project._id, isActive: true } },\n        {\n          $group: {\n            _id: null,\n            total: { $sum: 1 },\n            byType: {\n              $push: {\n                type: '$type',\n                reliability: '$reliability.score'\n              }\n            },\n            avgReliability: { $avg: '$reliability.score' }\n          }\n        }\n      ]),\n      \n      Claim.aggregate([\n        { $match: { project: project._id, isActive: true } },\n        {\n          $group: {\n            _id: '$status',\n            count: { $sum: 1 }\n          }\n        }\n      ])\n    ]);\n    \n    const analytics = {\n      claims: claimsStats[0] || { total: 0, avgConfidence: 0, avgQuality: 0 },\n      evidence: evidenceStats[0] || { total: 0, avgReliability: 0 },\n      statusDistribution: qualityStats.reduce((acc: any, item: any) => {\n        acc[item._id] = item.count;\n        return acc;\n      }, {}),\n      lastUpdated: new Date(),\n    };\n    \n    // Cache for 10 minutes\n    await redisManager.set(cacheKey, analytics, 600);\n    \n    res.json({\n      success: true,\n      data: analytics,\n    });\n  })\n);\n\n// GET /api/projects/public - Get public projects\nrouter.get('/public',\n  asyncHandler(async (req: Request, res: Response) => {\n    const { page = 1, limit = 20, sort = 'updatedAt', order = 'desc' } = req.query;\n    const { type, search } = req.query;\n    \n    // Build query\n    const query: any = {\n      visibility: 'public',\n      isActive: true,\n      status: { $in: ['active', 'completed'] }\n    };\n    \n    if (type) query.type = type;\n    if (search) {\n      query.$text = { $search: search as string };\n    }\n    \n    // Execute query\n    const skip = (Number(page) - 1) * Number(limit);\n    const sortObj: any = {};\n    sortObj[sort as string] = order === 'asc' ? 1 : -1;\n    \n    const [projects, total] = await Promise.all([\n      Project.find(query)\n        .populate('owner', 'firstName lastName')\n        .select('-collaborators -settings -integration') // Hide sensitive info\n        .sort(sortObj)\n        .skip(skip)\n        .limit(Number(limit)),\n      Project.countDocuments(query)\n    ]);\n    \n    const pagination = {\n      page: Number(page),\n      limit: Number(limit),\n      total,\n      totalPages: Math.ceil(total / Number(limit)),\n      hasNext: Number(page) < Math.ceil(total / Number(limit)),\n      hasPrev: Number(page) > 1,\n    };\n    \n    res.json({\n      success: true,\n      data: projects,\n      pagination,\n    });\n  })\n);\n\nexport default router;
+    ]);
+    
+    // Clear caches
+    await redisManager.deletePattern(`projects:*`);
+    await redisManager.deletePattern(`claims:*`);
+    
+    logger.info(`Project deleted: ${project._id} by ${req.user!.email}`);
+    
+    res.json({
+      success: true,
+      message: 'Project deleted successfully',
+    });
+  })
+);
+
+// POST /api/projects/:id/collaborators - Invite collaborator
+router.post('/:id/collaborators',
+  authenticate,
+  sanitize,
+  validate(validationSchemas.objectId, 'params'),
+  validate(validationSchemas.inviteCollaborator),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { email, role, message } = req.body;
+    const userId = req.user!._id.toString();
+    
+    const project = await Project.findOne({ _id: id, isActive: true });
+    
+    if (!project) {
+      throw createError('Project not found', 404, 'PROJECT_NOT_FOUND');
+    }
+    
+    // Check invite permissions
+    const canInvite = project.owner.toString() === userId ||
+      project.collaborators.some(c => 
+        c.user.toString() === userId && c.permissions.canInvite
+      );
+      
+    if (!canInvite) {
+      throw createError('No permission to invite collaborators', 403, 'INVITE_PERMISSION_DENIED');
+    }
+    
+    // Find user to invite
+    const userToInvite = await User.findOne({ 
+      email: email.toLowerCase(),
+      isActive: true 
+    });
+    
+    if (!userToInvite) {
+      throw createError('User not found', 404, 'USER_NOT_FOUND');
+    }
+    
+    // Check if already collaborator
+    const isOwner = project.owner.toString() === userToInvite._id.toString();
+    const isCollaborator = project.collaborators.some(c => 
+      c.user.toString() === userToInvite._id.toString()
+    );
+    
+    if (isOwner) {
+      throw createError('User is already the project owner', 400, 'ALREADY_OWNER');
+    }
+    
+    if (isCollaborator) {
+      throw createError('User is already a collaborator', 400, 'ALREADY_COLLABORATOR');
+    }
+    
+    // Add collaborator
+    await project.addCollaborator(userToInvite._id.toString(), role, userId);
+    
+    // Re-populate
+    await project.populate('collaborators.user', 'firstName lastName email');
+    
+    // TODO: Send invitation email
+    // await sendInvitationEmail(userToInvite.email, project.name, message);
+    
+    logger.info(`Collaborator invited: ${userToInvite.email} to project ${project._id}`);
+    
+    res.status(201).json({
+      success: true,
+      message: 'Collaborator invited successfully',
+      data: {
+        collaborator: project.collaborators[project.collaborators.length - 1],
+      },
+    });
+  })
+);
+
+// PUT /api/projects/:id/collaborators/:userId - Update collaborator role
+router.put('/:id/collaborators/:userId',
+  authenticate,
+  validate(validationSchemas.objectId, 'params'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id, userId: collaboratorId } = req.params;
+    const { role } = req.body;
+    const userId = req.user!._id.toString();
+    
+    if (!['viewer', 'editor', 'admin'].includes(role)) {
+      throw createError('Invalid role', 400, 'INVALID_ROLE');
+    }
+    
+    const project = await Project.findOne({ _id: id, isActive: true });
+    
+    if (!project) {
+      throw createError('Project not found', 404, 'PROJECT_NOT_FOUND');
+    }
+    
+    // Only owner can change roles
+    if (project.owner.toString() !== userId) {
+      throw createError('Only project owner can change collaborator roles', 403, 'ROLE_CHANGE_PERMISSION_DENIED');
+    }
+    
+    // Find collaborator
+    const collaborator = project.collaborators.find(c => 
+      c.user.toString() === collaboratorId
+    );
+    
+    if (!collaborator) {
+      throw createError('Collaborator not found', 404, 'COLLABORATOR_NOT_FOUND');
+    }
+    
+    // Update role and permissions
+    collaborator.role = role;
+    collaborator.permissions = {
+      canEdit: role === 'editor' || role === 'admin',
+      canDelete: role === 'admin',
+      canInvite: role === 'admin',
+      canExport: true,
+      canManageSettings: role === 'admin',
+    };
+    
+    await project.save();
+    
+    res.json({
+      success: true,
+      message: 'Collaborator role updated successfully',
+      data: { collaborator },
+    });
+  })
+);
+
+// DELETE /api/projects/:id/collaborators/:userId - Remove collaborator
+router.delete('/:id/collaborators/:userId',
+  authenticate,
+  validate(validationSchemas.objectId, 'params'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id, userId: collaboratorId } = req.params;
+    const userId = req.user!._id.toString();
+    
+    const project = await Project.findOne({ _id: id, isActive: true });
+    
+    if (!project) {
+      throw createError('Project not found', 404, 'PROJECT_NOT_FOUND');
+    }
+    
+    // Owner can remove anyone, collaborators can remove themselves
+    const canRemove = project.owner.toString() === userId ||
+      collaboratorId === userId;
+      
+    if (!canRemove) {
+      throw createError('No permission to remove this collaborator', 403, 'REMOVE_PERMISSION_DENIED');
+    }
+    
+    // Remove collaborator
+    await project.removeCollaborator(collaboratorId);
+    
+    res.json({
+      success: true,
+      message: 'Collaborator removed successfully',
+    });
+  })
+);
+
+// POST /api/projects/:id/documents - Upload document
+router.post('/:id/documents',
+  authenticate,
+  validate(validationSchemas.objectId, 'params'),
+  upload.single('document'),
+  validateFile({
+    required: true,
+    maxSize: 50 * 1024 * 1024, // 50MB
+    allowedTypes: [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'text/plain',
+      'text/html',
+      'application/rtf'
+    ],
+  }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const file = req.file!;
+    const userId = req.user!._id.toString();
+    
+    const project = await Project.findOne({ _id: id, isActive: true });
+    
+    if (!project) {
+      throw createError('Project not found', 404, 'PROJECT_NOT_FOUND');
+    }
+    
+    // Check upload permissions
+    const canUpload = project.owner.toString() === userId ||
+      project.collaborators.some(c => 
+        c.user.toString() === userId && c.permissions.canEdit
+      );
+      
+    if (!canUpload) {
+      throw createError('No permission to upload documents', 403, 'UPLOAD_PERMISSION_DENIED');
+    }
+    
+    // Add document to project
+    const document = {
+      filename: file.filename,
+      originalName: file.originalname,
+      mimetype: file.mimetype,
+      size: file.size,
+      path: file.path,
+      uploadedBy: req.user!._id,
+      uploadedAt: new Date(),
+      processed: false,
+      extractedClaims: 0,
+      metadata: {
+        encoding: file.encoding,
+      },
+    };
+    
+    project.documents.push(document);
+    await project.save();
+    
+    // TODO: Queue document for processing
+    // await queueDocumentProcessing(project._id.toString(), document);
+    
+    logger.info(`Document uploaded: ${file.originalname} to project ${project._id}`);
+    
+    res.status(201).json({
+      success: true,
+      message: 'Document uploaded successfully',
+      data: { document },
+    });
+  })
+);
+
+// GET /api/projects/:id/analytics - Get project analytics
+router.get('/:id/analytics',
+  authenticate,
+  validate(validationSchemas.objectId, 'params'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const userId = req.user!._id.toString();
+    
+    const project = await Project.findOne({ _id: id, isActive: true });
+    
+    if (!project) {
+      throw createError('Project not found', 404, 'PROJECT_NOT_FOUND');
+    }
+    
+    // Check access permissions
+    const hasAccess = project.owner.toString() === userId ||
+      project.collaborators.some(c => c.user.toString() === userId);
+      
+    if (!hasAccess) {
+      throw createError('Access denied to project', 403, 'PROJECT_ACCESS_DENIED');
+    }
+    
+    // Check cache
+    const cacheKey = `analytics:project:${id}`;
+    const cachedAnalytics = await redisManager.get(cacheKey);
+    if (cachedAnalytics) {
+      res.json({
+        success: true,
+        data: cachedAnalytics,
+        cached: true,
+      });
+      return;
+    }
+    
+    // Get analytics data
+    const [claimsStats, evidenceStats, qualityStats] = await Promise.all([
+      Claim.aggregate([
+        { $match: { project: project._id, isActive: true } },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: 1 },
+            byType: {
+              $push: {
+                type: '$type',
+                confidence: '$confidence',
+                status: '$status'
+              }
+            },
+            avgConfidence: { $avg: '$confidence' },
+            avgQuality: { $avg: '$quality.overallScore' }
+          }
+        }
+      ]),
+      
+      Evidence.aggregate([
+        { $match: { project: project._id, isActive: true } },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: 1 },
+            byType: {
+              $push: {
+                type: '$type',
+                reliability: '$reliability.score'
+              }
+            },
+            avgReliability: { $avg: '$reliability.score' }
+          }
+        }
+      ]),
+      
+      Claim.aggregate([
+        { $match: { project: project._id, isActive: true } },
+        {
+          $group: {
+            _id: '$status',
+            count: { $sum: 1 }
+          }
+        }
+      ])
+    ]);
+    
+    const analytics = {
+      claims: claimsStats[0] || { total: 0, avgConfidence: 0, avgQuality: 0 },
+      evidence: evidenceStats[0] || { total: 0, avgReliability: 0 },
+      statusDistribution: qualityStats.reduce((acc: any, item: any) => {
+        acc[item._id] = item.count;
+        return acc;
+      }, {}),
+      lastUpdated: new Date(),
+    };
+    
+    // Cache for 10 minutes
+    await redisManager.set(cacheKey, analytics, 600);
+    
+    res.json({
+      success: true,
+      data: analytics,
+    });
+  })
+);
+
+// GET /api/projects/public - Get public projects
+router.get('/public',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { page = 1, limit = 20, sort = 'updatedAt', order = 'desc' } = req.query;
+    const { type, search } = req.query;
+    
+    // Build query
+    const query: any = {
+      visibility: 'public',
+      isActive: true,
+      status: { $in: ['active', 'completed'] }
+    };
+    
+    if (type) query.type = type;
+    if (search) {
+      query.$text = { $search: search as string };
+    }
+    
+    // Execute query
+    const skip = (Number(page) - 1) * Number(limit);
+    const sortObj: any = {};
+    sortObj[sort as string] = order === 'asc' ? 1 : -1;
+    
+    const [projects, total] = await Promise.all([
+      Project.find(query)
+        .populate('owner', 'firstName lastName')
+        .select('-collaborators -settings -integration') // Hide sensitive info
+        .sort(sortObj)
+        .skip(skip)
+        .limit(Number(limit)),
+      Project.countDocuments(query)
+    ]);
+    
+    const pagination = {
+      page: Number(page),
+      limit: Number(limit),
+      total,
+      totalPages: Math.ceil(total / Number(limit)),
+      hasNext: Number(page) < Math.ceil(total / Number(limit)),
+      hasPrev: Number(page) > 1,
+    };
+    
+    res.json({
+      success: true,
+      data: projects,
+      pagination,
+    });
+  })
+);
+
+export default router;

@@ -204,6 +204,357 @@ export function setupWebSocketHandlers(io: SocketIOServer) {
         const { claimId, projectId } = data;
         
         // Check if claim is already being edited
-        const lockKey = `claim_edit:${claimId}`;\n        const currentEditor = await redisManager.checkLock(lockKey);
+        const lockKey = `claim_edit:${claimId}`;
+        const currentEditor = await redisManager.checkLock(lockKey);
         
-        if (currentEditor && currentEditor !== socket.userId) {\n          socket.emit('claim_edit_conflict', {\n            claimId,\n            currentEditor,\n            message: 'This claim is currently being edited by another user'\n          });\n          return;\n        }\n        \n        // Acquire edit lock\n        const lockAcquired = await redisManager.acquireLock(lockKey, socket.userId!, 300); // 5 minutes\n        \n        if (!lockAcquired) {\n          socket.emit('claim_edit_conflict', {\n            claimId,\n            message: 'Unable to acquire edit lock'\n          });\n          return;\n        }\n        \n        // Notify others in the project\n        socket.to(`project:${projectId}`).emit('claim_edit_started', {\n          claimId,\n          userId: socket.userId,\n          user: socket.user,\n          timestamp: new Date(),\n        });\n        \n        socket.emit('claim_edit_lock_acquired', {\n          claimId,\n          timestamp: new Date(),\n        });\n        \n      } catch (error) {\n        logger.error('Error starting claim edit:', error);\n        socket.emit('error', { message: 'Failed to start editing claim' });\n      }\n    });\n\n    // Handle claim edit updates\n    socket.on('claim_edit_update', async (data: { \n      claimId: string, \n      projectId: string, \n      changes: any,\n      cursorPosition?: number \n    }) => {\n      try {\n        const { claimId, projectId, changes, cursorPosition } = data;\n        \n        // Verify edit lock\n        const lockOwner = await redisManager.checkLock(`claim_edit:${claimId}`);\n        if (lockOwner !== socket.userId) {\n          socket.emit('claim_edit_conflict', {\n            claimId,\n            message: 'Edit lock lost'\n          });\n          return;\n        }\n        \n        // Broadcast changes to others in the project\n        socket.to(`project:${projectId}`).emit('claim_edit_update', {\n          claimId,\n          userId: socket.userId,\n          user: socket.user,\n          changes,\n          cursorPosition,\n          timestamp: new Date(),\n        });\n        \n        // Store changes in Redis for conflict resolution\n        await redisManager.set(\n          `claim_changes:${claimId}`,\n          { changes, userId: socket.userId, timestamp: new Date() },\n          300 // 5 minutes\n        );\n        \n      } catch (error) {\n        logger.error('Error updating claim edit:', error);\n        socket.emit('error', { message: 'Failed to update claim' });\n      }\n    });\n\n    // Handle claim edit end\n    socket.on('claim_edit_end', async (data: { claimId: string, projectId: string, save?: boolean }) => {\n      try {\n        const { claimId, projectId, save = true } = data;\n        \n        // Release edit lock\n        await redisManager.releaseLock(`claim_edit:${claimId}`, socket.userId!);\n        \n        // Clean up change cache if saving\n        if (save) {\n          await redisManager.del(`claim_changes:${claimId}`);\n        }\n        \n        // Notify others in the project\n        socket.to(`project:${projectId}`).emit('claim_edit_ended', {\n          claimId,\n          userId: socket.userId,\n          user: socket.user,\n          saved: save,\n          timestamp: new Date(),\n        });\n        \n        socket.emit('claim_edit_lock_released', {\n          claimId,\n          timestamp: new Date(),\n        });\n        \n      } catch (error) {\n        logger.error('Error ending claim edit:', error);\n        socket.emit('error', { message: 'Failed to end claim editing' });\n      }\n    });\n\n    // Handle cursor position updates\n    socket.on('cursor_update', (data: { \n      projectId: string,\n      elementId: string,\n      position: { x: number, y: number },\n      selection?: { start: number, end: number }\n    }) => {\n      const { projectId, elementId, position, selection } = data;\n      \n      // Broadcast cursor position to others in the project\n      socket.to(`project:${projectId}`).emit('cursor_update', {\n        userId: socket.userId,\n        user: socket.user,\n        elementId,\n        position,\n        selection,\n        timestamp: new Date(),\n      });\n    });\n\n    // Handle chat messages in sessions\n    socket.on('session_chat', async (data: { sessionId: string, message: string }) => {\n      try {\n        const { sessionId, message } = data;\n        \n        if (!message || message.trim().length === 0) {\n          return;\n        }\n        \n        // Add message to session\n        const session = await Session.findById(sessionId);\n        if (!session) {\n          socket.emit('error', { message: 'Session not found' });\n          return;\n        }\n        \n        await session.addChatMessage(socket.userId!, message.trim());\n        \n        // Broadcast to all session participants\n        io.to(`session:${sessionId}`).emit('session_chat', {\n          userId: socket.userId,\n          user: socket.user,\n          message: message.trim(),\n          timestamp: new Date(),\n        });\n        \n      } catch (error) {\n        logger.error('Error sending chat message:', error);\n        socket.emit('error', { message: 'Failed to send message' });\n      }\n    });\n\n    // Handle voice call signaling\n    socket.on('voice_call_offer', (data: { sessionId: string, offer: any }) => {\n      socket.to(`session:${data.sessionId}`).emit('voice_call_offer', {\n        from: socket.userId,\n        offer: data.offer,\n      });\n    });\n\n    socket.on('voice_call_answer', (data: { sessionId: string, answer: any, to: string }) => {\n      socket.to(`session:${data.sessionId}`).emit('voice_call_answer', {\n        from: socket.userId,\n        answer: data.answer,\n        to: data.to,\n      });\n    });\n\n    socket.on('voice_call_ice_candidate', (data: { sessionId: string, candidate: any, to: string }) => {\n      socket.to(`session:${data.sessionId}`).emit('voice_call_ice_candidate', {\n        from: socket.userId,\n        candidate: data.candidate,\n        to: data.to,\n      });\n    });\n\n    // Handle screen sharing\n    socket.on('screen_share_start', async (data: { sessionId: string }) => {\n      try {\n        const { sessionId } = data;\n        \n        // Update session with screen share info\n        const session = await Session.findById(sessionId);\n        if (session) {\n          session.communication.screenShare.active = true;\n          session.communication.screenShare.presenter = socket.userId!;\n          session.communication.screenShare.startedAt = new Date();\n          await session.save();\n        }\n        \n        // Notify all session participants\n        socket.to(`session:${sessionId}`).emit('screen_share_started', {\n          presenter: socket.userId,\n          user: socket.user,\n          timestamp: new Date(),\n        });\n        \n      } catch (error) {\n        logger.error('Error starting screen share:', error);\n        socket.emit('error', { message: 'Failed to start screen share' });\n      }\n    });\n\n    socket.on('screen_share_end', async (data: { sessionId: string }) => {\n      try {\n        const { sessionId } = data;\n        \n        // Update session\n        const session = await Session.findById(sessionId);\n        if (session) {\n          session.communication.screenShare.active = false;\n          session.communication.screenShare.presenter = undefined;\n          await session.save();\n        }\n        \n        // Notify all session participants\n        socket.to(`session:${sessionId}`).emit('screen_share_ended', {\n          presenter: socket.userId,\n          timestamp: new Date(),\n        });\n        \n      } catch (error) {\n        logger.error('Error ending screen share:', error);\n      }\n    });\n\n    // Handle user activity updates\n    socket.on('activity_update', async (data: { type: string, details: any }) => {\n      try {\n        await redisManager.trackUserActivity(socket.userId!, {\n          action: data.type,\n          ...data.details,\n          websocket: true,\n        });\n      } catch (error) {\n        logger.error('Error tracking activity:', error);\n      }\n    });\n\n    // Handle ping/pong for connection health\n    socket.on('ping', () => {\n      socket.emit('pong', { timestamp: new Date() });\n    });\n\n    // Handle disconnection\n    socket.on('disconnect', async (reason) => {\n      logger.info(`WebSocket disconnected: ${socket.userId} - ${reason}`);\n      \n      try {\n        // Release any edit locks held by this user\n        const lockKeys = await redisManager.keys(`*:${socket.userId}`);\n        for (const key of lockKeys) {\n          if (key.includes('claim_edit:')) {\n            const claimId = key.split(':')[1];\n            await redisManager.releaseLock(`claim_edit:${claimId}`, socket.userId!);\n            \n            // Notify project members\n            if (socket.currentProject) {\n              socket.to(`project:${socket.currentProject}`).emit('claim_edit_ended', {\n                claimId,\n                userId: socket.userId,\n                forced: true,\n                reason: 'User disconnected',\n                timestamp: new Date(),\n              });\n            }\n          }\n        }\n        \n        // Update session if user was in one\n        if (socket.currentSession) {\n          const session = await Session.findById(socket.currentSession);\n          if (session) {\n            await session.removeParticipant(socket.userId!);\n            \n            // Notify other session participants\n            socket.to(`session:${socket.currentSession}`).emit('user_left_session', {\n              userId: socket.userId,\n              user: socket.user,\n              reason: 'disconnected',\n              timestamp: new Date(),\n            });\n          }\n        }\n        \n        // Notify project members if user was in a project\n        if (socket.currentProject) {\n          socket.to(`project:${socket.currentProject}`).emit('user_left_project', {\n            userId: socket.userId,\n            user: socket.user,\n            reason: 'disconnected',\n            timestamp: new Date(),\n          });\n        }\n        \n        // Track disconnection\n        await redisManager.trackUserActivity(socket.userId!, {\n          action: 'websocket_disconnect',\n          reason,\n        });\n        \n      } catch (error) {\n        logger.error('Error handling disconnection cleanup:', error);\n      }\n    });\n  });\n}\n\n// Helper functions\nasync function getActiveUsersInProject(io: SocketIOServer, projectId: string) {\n  try {\n    const sockets = await io.in(`project:${projectId}`).fetchSockets();\n    return sockets.map((socket: any) => ({\n      userId: socket.userId,\n      user: socket.user,\n      connectedAt: socket.handshake.time,\n    }));\n  } catch (error) {\n    logger.error('Error getting active users in project:', error);\n    return [];\n  }\n}\n\nasync function getActiveUsersInSession(io: SocketIOServer, sessionId: string) {\n  try {\n    const sockets = await io.in(`session:${sessionId}`).fetchSockets();\n    return sockets.map((socket: any) => ({\n      userId: socket.userId,\n      user: socket.user,\n      connectedAt: socket.handshake.time,\n    }));\n  } catch (error) {\n    logger.error('Error getting active users in session:', error);\n    return [];\n  }\n}"
+        if (currentEditor && currentEditor !== socket.userId) {
+          socket.emit('claim_edit_conflict', {
+            claimId,
+            currentEditor,
+            message: 'This claim is currently being edited by another user'
+          });
+          return;
+        }
+        
+        // Acquire edit lock
+        const lockAcquired = await redisManager.acquireLock(lockKey, socket.userId!, 300); // 5 minutes
+        
+        if (!lockAcquired) {
+          socket.emit('claim_edit_conflict', {
+            claimId,
+            message: 'Unable to acquire edit lock'
+          });
+          return;
+        }
+        
+        // Notify others in the project
+        socket.to(`project:${projectId}`).emit('claim_edit_started', {
+          claimId,
+          userId: socket.userId,
+          user: socket.user,
+          timestamp: new Date(),
+        });
+        
+        socket.emit('claim_edit_lock_acquired', {
+          claimId,
+          timestamp: new Date(),
+        });
+        
+      } catch (error) {
+        logger.error('Error starting claim edit:', error);
+        socket.emit('error', { message: 'Failed to start editing claim' });
+      }
+    });
+
+    // Handle claim edit updates
+    socket.on('claim_edit_update', async (data: { 
+      claimId: string, 
+      projectId: string, 
+      changes: any,
+      cursorPosition?: number 
+    }) => {
+      try {
+        const { claimId, projectId, changes, cursorPosition } = data;
+        
+        // Verify edit lock
+        const lockOwner = await redisManager.checkLock(`claim_edit:${claimId}`);
+        if (lockOwner !== socket.userId) {
+          socket.emit('claim_edit_conflict', {
+            claimId,
+            message: 'Edit lock lost'
+          });
+          return;
+        }
+        
+        // Broadcast changes to others in the project
+        socket.to(`project:${projectId}`).emit('claim_edit_update', {
+          claimId,
+          userId: socket.userId,
+          user: socket.user,
+          changes,
+          cursorPosition,
+          timestamp: new Date(),
+        });
+        
+        // Store changes in Redis for conflict resolution
+        await redisManager.set(
+          `claim_changes:${claimId}`,
+          { changes, userId: socket.userId, timestamp: new Date() },
+          300 // 5 minutes
+        );
+        
+      } catch (error) {
+        logger.error('Error updating claim edit:', error);
+        socket.emit('error', { message: 'Failed to update claim' });
+      }
+    });
+
+    // Handle claim edit end
+    socket.on('claim_edit_end', async (data: { claimId: string, projectId: string, save?: boolean }) => {
+      try {
+        const { claimId, projectId, save = true } = data;
+        
+        // Release edit lock
+        await redisManager.releaseLock(`claim_edit:${claimId}`, socket.userId!);
+        
+        // Clean up change cache if saving
+        if (save) {
+          await redisManager.del(`claim_changes:${claimId}`);
+        }
+        
+        // Notify others in the project
+        socket.to(`project:${projectId}`).emit('claim_edit_ended', {
+          claimId,
+          userId: socket.userId,
+          user: socket.user,
+          saved: save,
+          timestamp: new Date(),
+        });
+        
+        socket.emit('claim_edit_lock_released', {
+          claimId,
+          timestamp: new Date(),
+        });
+        
+      } catch (error) {
+        logger.error('Error ending claim edit:', error);
+        socket.emit('error', { message: 'Failed to end claim editing' });
+      }
+    });
+
+    // Handle cursor position updates
+    socket.on('cursor_update', (data: { 
+      projectId: string,
+      elementId: string,
+      position: { x: number, y: number },
+      selection?: { start: number, end: number }
+    }) => {
+      const { projectId, elementId, position, selection } = data;
+      
+      // Broadcast cursor position to others in the project
+      socket.to(`project:${projectId}`).emit('cursor_update', {
+        userId: socket.userId,
+        user: socket.user,
+        elementId,
+        position,
+        selection,
+        timestamp: new Date(),
+      });
+    });
+
+    // Handle chat messages in sessions
+    socket.on('session_chat', async (data: { sessionId: string, message: string }) => {
+      try {
+        const { sessionId, message } = data;
+        
+        if (!message || message.trim().length === 0) {
+          return;
+        }
+        
+        // Add message to session
+        const session = await Session.findById(sessionId);
+        if (!session) {
+          socket.emit('error', { message: 'Session not found' });
+          return;
+        }
+        
+        await session.addChatMessage(socket.userId!, message.trim());
+        
+        // Broadcast to all session participants
+        io.to(`session:${sessionId}`).emit('session_chat', {
+          userId: socket.userId,
+          user: socket.user,
+          message: message.trim(),
+          timestamp: new Date(),
+        });
+        
+      } catch (error) {
+        logger.error('Error sending chat message:', error);
+        socket.emit('error', { message: 'Failed to send message' });
+      }
+    });
+
+    // Handle voice call signaling
+    socket.on('voice_call_offer', (data: { sessionId: string, offer: any }) => {
+      socket.to(`session:${data.sessionId}`).emit('voice_call_offer', {
+        from: socket.userId,
+        offer: data.offer,
+      });
+    });
+
+    socket.on('voice_call_answer', (data: { sessionId: string, answer: any, to: string }) => {
+      socket.to(`session:${data.sessionId}`).emit('voice_call_answer', {
+        from: socket.userId,
+        answer: data.answer,
+        to: data.to,
+      });
+    });
+
+    socket.on('voice_call_ice_candidate', (data: { sessionId: string, candidate: any, to: string }) => {
+      socket.to(`session:${data.sessionId}`).emit('voice_call_ice_candidate', {
+        from: socket.userId,
+        candidate: data.candidate,
+        to: data.to,
+      });
+    });
+
+    // Handle screen sharing
+    socket.on('screen_share_start', async (data: { sessionId: string }) => {
+      try {
+        const { sessionId } = data;
+        
+        // Update session with screen share info
+        const session = await Session.findById(sessionId);
+        if (session) {
+          session.communication.screenShare.active = true;
+          session.communication.screenShare.presenter = socket.userId!;
+          session.communication.screenShare.startedAt = new Date();
+          await session.save();
+        }
+        
+        // Notify all session participants
+        socket.to(`session:${sessionId}`).emit('screen_share_started', {
+          presenter: socket.userId,
+          user: socket.user,
+          timestamp: new Date(),
+        });
+        
+      } catch (error) {
+        logger.error('Error starting screen share:', error);
+        socket.emit('error', { message: 'Failed to start screen share' });
+      }
+    });
+
+    socket.on('screen_share_end', async (data: { sessionId: string }) => {
+      try {
+        const { sessionId } = data;
+        
+        // Update session
+        const session = await Session.findById(sessionId);
+        if (session) {
+          session.communication.screenShare.active = false;
+          session.communication.screenShare.presenter = undefined;
+          await session.save();
+        }
+        
+        // Notify all session participants
+        socket.to(`session:${sessionId}`).emit('screen_share_ended', {
+          presenter: socket.userId,
+          timestamp: new Date(),
+        });
+        
+      } catch (error) {
+        logger.error('Error ending screen share:', error);
+      }
+    });
+
+    // Handle user activity updates
+    socket.on('activity_update', async (data: { type: string, details: any }) => {
+      try {
+        await redisManager.trackUserActivity(socket.userId!, {
+          action: data.type,
+          ...data.details,
+          websocket: true,
+        });
+      } catch (error) {
+        logger.error('Error tracking activity:', error);
+      }
+    });
+
+    // Handle ping/pong for connection health
+    socket.on('ping', () => {
+      socket.emit('pong', { timestamp: new Date() });
+    });
+
+    // Handle disconnection
+    socket.on('disconnect', async (reason) => {
+      logger.info(`WebSocket disconnected: ${socket.userId} - ${reason}`);
+      
+      try {
+        // Release any edit locks held by this user
+        const lockKeys = await redisManager.keys(`*:${socket.userId}`);
+        for (const key of lockKeys) {
+          if (key.includes('claim_edit:')) {
+            const claimId = key.split(':')[1];
+            await redisManager.releaseLock(`claim_edit:${claimId}`, socket.userId!);
+            
+            // Notify project members
+            if (socket.currentProject) {
+              socket.to(`project:${socket.currentProject}`).emit('claim_edit_ended', {
+                claimId,
+                userId: socket.userId,
+                forced: true,
+                reason: 'User disconnected',
+                timestamp: new Date(),
+              });
+            }
+          }
+        }
+        
+        // Update session if user was in one
+        if (socket.currentSession) {
+          const session = await Session.findById(socket.currentSession);
+          if (session) {
+            await session.removeParticipant(socket.userId!);
+            
+            // Notify other session participants
+            socket.to(`session:${socket.currentSession}`).emit('user_left_session', {
+              userId: socket.userId,
+              user: socket.user,
+              reason: 'disconnected',
+              timestamp: new Date(),
+            });
+          }
+        }
+        
+        // Notify project members if user was in a project
+        if (socket.currentProject) {
+          socket.to(`project:${socket.currentProject}`).emit('user_left_project', {
+            userId: socket.userId,
+            user: socket.user,
+            reason: 'disconnected',
+            timestamp: new Date(),
+          });
+        }
+        
+        // Track disconnection
+        await redisManager.trackUserActivity(socket.userId!, {
+          action: 'websocket_disconnect',
+          reason,
+        });
+        
+      } catch (error) {
+        logger.error('Error handling disconnection cleanup:', error);
+      }
+    });
+  });
+}
+
+// Helper functions
+async function getActiveUsersInProject(io: SocketIOServer, projectId: string) {
+  try {
+    const sockets = await io.in(`project:${projectId}`).fetchSockets();
+    return sockets.map((socket: any) => ({
+      userId: socket.userId,
+      user: socket.user,
+      connectedAt: socket.handshake.time,
+    }));
+  } catch (error) {
+    logger.error('Error getting active users in project:', error);
+    return [];
+  }
+}
+
+async function getActiveUsersInSession(io: SocketIOServer, sessionId: string) {
+  try {
+    const sockets = await io.in(`session:${sessionId}`).fetchSockets();
+    return sockets.map((socket: any) => ({
+      userId: socket.userId,
+      user: socket.user,
+      connectedAt: socket.handshake.time,
+    }));
+  } catch (error) {
+    logger.error('Error getting active users in session:', error);
+    return [];
+  }
+}
