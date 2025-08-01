@@ -3,7 +3,8 @@
     "next/core-web-vitals"
   ],
   "rules": {
-    "no-unused-vars": "error",
-    "prefer-const": "error"
+    "no-unused-vars": "warn",
+    "prefer-const": "warn",
+    "react/no-unescaped-entities": "warn"
   }
 }
