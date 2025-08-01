@@ -1,17 +1,17 @@
 'use client';
 
-import { Home, Edit, Graph, Search, Users, Settings } from 'lucide-react';
+// Icons replaced with emojis for now
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { clsx } from 'clsx';
+import clsx from 'clsx';
 
 const navigation = [
-  { name: 'Dashboard', href: '/', icon: Home },
-  { name: 'Explore', href: '/explore', icon: Graph },
-  { name: 'Search', href: '/search', icon: Search },
-  { name: 'Editor', href: '/editor', icon: Edit },
-  { name: 'Collaborate', href: '/collaborate', icon: Users },
-  { name: 'Settings', href: '/settings', icon: Settings },
+  { name: 'Dashboard', href: '/', icon: '🏠' },
+  { name: 'Explore', href: '/explore', icon: '🔍' },
+  { name: 'Search', href: '/search', icon: '🔎' },
+  { name: 'Editor', href: '/editor', icon: '✏️' },
+  { name: 'Collaborate', href: '/collaborate', icon: '👥' },
+  { name: 'Settings', href: '/settings', icon: '⚙️' },
 ];
 
 export function Sidebar() {
@@ -22,7 +22,7 @@ export function Sidebar() {
       <div className="flex h-14 items-center px-6">
         <div className="flex items-center space-x-2">
           <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-            <Graph className="h-5 w-5 text-primary-foreground" />
+            <span className="text-primary-foreground">🗺️</span>
           </div>
           <span className="font-semibold">ClaimMapper</span>
         </div>
@@ -42,7 +42,7 @@ export function Sidebar() {
                   : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
               )}
             >
-              <item.icon className="h-5 w-5" />
+              <span className="text-lg">{item.icon}</span>
               <span>{item.name}</span>
             </Link>
           );
