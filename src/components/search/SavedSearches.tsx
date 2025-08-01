@@ -11,7 +11,7 @@ import {
   Share2,
   Play,
   MoreHorizontal,
-  Public,
+  Globe,
   Lock,
   Eye,
   Users,
@@ -127,9 +127,9 @@ function SavedSearchCard({ search, onSelect, onDelete, onUpdate, currentUserId }
                 <h3 className="font-medium text-sm truncate">{search.name}</h3>
                 <div className="flex items-center space-x-1">
                   {search.isPublic ? (
-                    <Public className="h-3 w-3 text-muted-foreground" title="Public search" />
+                    <Globe className="h-3 w-3 text-muted-foreground" aria-label="Public search" />
                   ) : (
-                    <Lock className="h-3 w-3 text-muted-foreground" title="Private search" />
+                    <Lock className="h-3 w-3 text-muted-foreground" aria-label="Private search" />
                   )}
                   
                   {search.tags.length > 0 && (

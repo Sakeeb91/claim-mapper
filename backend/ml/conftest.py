@@ -11,6 +11,28 @@ from pathlib import Path
 import tempfile
 import shutil
 from typing import Dict, List, Any
+import sys
+
+# Mock heavy ML dependencies globally for all tests
+mock_transformers = MagicMock()
+mock_transformers.AutoTokenizer = MagicMock()
+mock_transformers.AutoModelForSequenceClassification = MagicMock()
+mock_transformers.pipeline = MagicMock()
+sys.modules['transformers'] = mock_transformers
+
+mock_sentence_transformers = MagicMock()
+mock_sentence_transformers.SentenceTransformer = MagicMock()
+sys.modules['sentence_transformers'] = mock_sentence_transformers
+
+mock_torch = MagicMock()
+sys.modules['torch'] = mock_torch
+
+mock_spacy = MagicMock()
+sys.modules['spacy'] = mock_spacy
+
+mock_loguru = MagicMock()
+mock_loguru.logger = MagicMock()
+sys.modules['loguru'] = mock_loguru
 
 # Import test fixtures
 from tests.fixtures.claim_fixtures import *
