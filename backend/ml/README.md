@@ -7,11 +7,12 @@ Advanced Natural Language Processing service for claim extraction, argument mini
 ### Core NLP Components
 
 1. **ClaimExtractor** - Extract claims from text using transformer models
-2. **ArgumentMiner** - Identify claims, premises, and evidence with logical structure analysis
-3. **SemanticAnalyzer** - Detect claim relationships and semantic similarity
-4. **EntityExtractor** - Named entity recognition and relationship extraction
-5. **QualityScorer** - Assess claim confidence and quality metrics
-6. **GraphAnalyzer** - Analyze knowledge graph structure and relationships
+2. **ReasoningChainGenerator** - Advanced reasoning chain generation with LLM integration
+3. **ArgumentMiner** - Identify claims, premises, and evidence with logical structure analysis
+4. **SemanticAnalyzer** - Detect claim relationships and semantic similarity
+5. **EntityExtractor** - Named entity recognition and relationship extraction
+6. **QualityScorer** - Assess claim confidence and quality metrics
+7. **GraphAnalyzer** - Analyze knowledge graph structure and relationships
 
 ### API Endpoints
 
@@ -34,6 +35,14 @@ Advanced Natural Language Processing service for claim extraction, argument mini
 
 #### Quality Assessment
 - `POST /validate` - Validate claim quality and reliability
+
+#### Advanced Reasoning (NEW)
+- `POST /reasoning/generate` - Generate advanced reasoning chains with comprehensive analysis
+- `POST /reasoning/analyze` - Analyze existing reasoning chains for fallacies and gaps
+- `POST /reasoning/validate` - Validate logical structure and reasoning quality
+- `POST /reasoning/gaps` - Identify logical gaps and missing elements
+- `POST /reasoning/strengthen` - Suggest improvements to strengthen reasoning
+- `POST /reasoning/multi-claim` - Analyze reasoning networks across multiple claims
 
 #### Graph Analysis
 - `POST /analyze-graph` - Analyze knowledge graph structure
