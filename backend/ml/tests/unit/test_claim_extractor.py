@@ -5,6 +5,21 @@ import pytest
 import asyncio
 from unittest.mock import MagicMock, AsyncMock, patch
 import numpy as np
+import sys
+
+# Mock transformers before importing the service
+mock_transformers = MagicMock()
+mock_transformers.AutoTokenizer = MagicMock()
+mock_transformers.AutoModelForSequenceClassification = MagicMock()
+mock_transformers.pipeline = MagicMock()
+sys.modules['transformers'] = mock_transformers
+
+# Mock other ML dependencies
+mock_sentence_transformers = MagicMock()
+sys.modules['sentence_transformers'] = mock_sentence_transformers
+
+mock_torch = MagicMock()
+sys.modules['torch'] = mock_torch
 
 from services.claim_extractor import ClaimExtractor
 from models.schemas import ClaimType
