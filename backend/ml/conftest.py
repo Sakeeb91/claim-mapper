@@ -14,7 +14,14 @@ from typing import Dict, List, Any
 
 # Import test fixtures
 from tests.fixtures.claim_fixtures import *
-from tests.fixtures.model_fixtures import *
+
+# Conditionally import model fixtures only if torch is available
+try:
+    import torch
+    from tests.fixtures.model_fixtures import *
+except ImportError:
+    # Skip model fixtures if torch is not available (CI environment)
+    pass
 
 
 @pytest.fixture(scope="session")
