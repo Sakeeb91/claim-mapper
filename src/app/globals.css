@@ -64,7 +64,8 @@
 }
 
 .link.highlighted {
-  @apply stroke-primary stroke-3;
+  @apply stroke-primary;
+  stroke-width: 3;
 }
 
 .claim-node {
