@@ -1,8 +1,27 @@
+// Mock modules first before any imports
+const mockAxiosInstance = {
+  get: jest.fn(),
+  post: jest.fn(),
+  put: jest.fn(),
+  patch: jest.fn(),
+  delete: jest.fn(),
+  interceptors: {
+    request: {
+      use: jest.fn(),
+    },
+    response: {
+      use: jest.fn(),
+    },
+  },
+}
+
+jest.mock('axios', () => ({
+  create: jest.fn(() => mockAxiosInstance),
+}))
+
 import axios, { AxiosResponse } from 'axios'
 import { apiService } from '../api'
 
-// Mock axios
-jest.mock('axios')
 const mockedAxios = axios as jest.Mocked<typeof axios>
 
 // Mock window.location for redirect tests
@@ -33,25 +52,9 @@ const localStorageMock = (() => {
 Object.defineProperty(window, 'localStorage', { value: localStorageMock })
 
 describe('ApiService', () => {
-  const mockAxiosInstance = {
-    get: jest.fn(),
-    post: jest.fn(),
-    put: jest.fn(),
-    patch: jest.fn(),
-    delete: jest.fn(),
-    interceptors: {
-      request: {
-        use: jest.fn(),
-      },
-      response: {
-        use: jest.fn(),
-      },
-    },
-  }
 
   beforeEach(() => {
     jest.clearAllMocks()
-    mockedAxios.create.mockReturnValue(mockAxiosInstance as any)
     localStorageMock.clear()
     mockLocation.href = ''
   })
@@ -72,7 +75,11 @@ describe('ApiService', () => {
       const originalEnv = process.env.NEXT_PUBLIC_API_URL
       process.env.NEXT_PUBLIC_API_URL = 'https://api.example.com'
 
-      // Create a new instance to test environment variable
+      // Clear module cache and reimport
+      jest.resetModules()
+      jest.mock('axios', () => ({
+        create: jest.fn(() => mockAxiosInstance),
+      }))
       const { apiService: newApiService } = require('../api')
 
       expect(mockedAxios.create).toHaveBeenCalledWith(
