@@ -229,7 +229,7 @@ describe('KnowledgeGraph', () => {
   })
 
   it('filters nodes based on node types', () => {
-    const limitedFilters = { ...mockFilters, nodeTypes: ['claim'] }
+    const limitedFilters: GraphFilters = { ...mockFilters, nodeTypes: ['claim'] as ('claim' | 'evidence' | 'reasoning')[] }
     render(<KnowledgeGraph {...defaultProps} filters={limitedFilters} />)
     // Should only show claim nodes (1 node)
     expect(screen.getByText('1 nodes, 0 connections')).toBeInTheDocument()
@@ -243,7 +243,7 @@ describe('KnowledgeGraph', () => {
   })
 
   it('filters links based on link types', () => {
-    const linkFilters = { ...mockFilters, linkTypes: ['supports'] }
+    const linkFilters: GraphFilters = { ...mockFilters, linkTypes: ['supports'] as ('supports' | 'contradicts' | 'relates' | 'reasoning')[] }
     render(<KnowledgeGraph {...defaultProps} filters={linkFilters} />)
     // Should show all nodes but only 1 link (supports)
     expect(screen.getByText('3 nodes, 1 connections')).toBeInTheDocument()
