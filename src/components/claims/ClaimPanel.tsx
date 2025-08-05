@@ -1,11 +1,34 @@
 'use client';
 
-import { ClaimPanelProps } from '@/types';
+import { ClaimPanelProps, Claim } from '@/types';
 import { useAppStore } from '@/store/useAppStore';
 import { Plus, Filter, MoreHorizontal } from 'lucide-react';
+import { useState } from 'react';
 
 export function ClaimPanel({ selectedClaim, onClaimSelect }: ClaimPanelProps) {
-  const { claims, loading } = useAppStore();
+  const { claims, loading, addClaim } = useAppStore();
+  const [isAddingClaim, setIsAddingClaim] = useState(false);
+  const [newClaimText, setNewClaimText] = useState('');
+  const [newClaimType, setNewClaimType] = useState<'hypothesis' | 'assertion' | 'question'>('assertion');
+
+  const handleAddClaim = () => {
+    if (newClaimText.trim()) {
+      const newClaim: Claim = {
+        id: `claim_${Date.now()}`,
+        text: newClaimText,
+        type: newClaimType,
+        confidence: 0.5,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        tags: [],
+        evidence: [],
+        reasoning: []
+      };
+      addClaim(newClaim);
+      setNewClaimText('');
+      setIsAddingClaim(false);
+    }
+  };
 
   return (
     <div className="flex h-full flex-col">
@@ -16,11 +39,60 @@ export function ClaimPanel({ selectedClaim, onClaimSelect }: ClaimPanelProps) {
           <button className="rounded-md p-1 hover:bg-accent">
             <Filter className="h-4 w-4" />
           </button>
-          <button className="rounded-md p-1 hover:bg-accent">
+          <button 
+            onClick={() => setIsAddingClaim(true)}
+            className="rounded-md p-1 hover:bg-accent"
+            title="Add new claim"
+          >
             <Plus className="h-4 w-4" />
           </button>
         </div>
       </div>
+
+      {/* Add Claim Form */}
+      {isAddingClaim && (
+        <div className="border-b border-border bg-accent/50 p-4">
+          <div className="space-y-3">
+            <textarea
+              value={newClaimText}
+              onChange={(e) => setNewClaimText(e.target.value)}
+              placeholder="Enter your claim..."
+              className="w-full rounded-md border border-border bg-background p-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              rows={3}
+              autoFocus
+            />
+            <div className="flex items-center justify-between">
+              <select
+                value={newClaimType}
+                onChange={(e) => setNewClaimType(e.target.value as any)}
+                className="rounded-md border border-border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="assertion">Assertion</option>
+                <option value="hypothesis">Hypothesis</option>
+                <option value="question">Question</option>
+              </select>
+              <div className="space-x-2">
+                <button
+                  onClick={() => {
+                    setIsAddingClaim(false);
+                    setNewClaimText('');
+                  }}
+                  className="rounded-md px-3 py-1 text-sm hover:bg-accent"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAddClaim}
+                  disabled={!newClaimText.trim()}
+                  className="rounded-md bg-primary px-3 py-1 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                >
+                  Add
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Claims List */}
       <div className="flex-1 overflow-y-auto">
@@ -31,7 +103,10 @@ export function ClaimPanel({ selectedClaim, onClaimSelect }: ClaimPanelProps) {
         ) : claims.length === 0 ? (
           <div className="flex flex-col items-center justify-center p-8 text-center">
             <div className="mb-2 text-sm text-muted-foreground">No claims found</div>
-            <button className="flex items-center space-x-2 rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground hover:bg-primary/90">
+            <button 
+              onClick={() => setIsAddingClaim(true)}
+              className="flex items-center space-x-2 rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground hover:bg-primary/90"
+            >
               <Plus className="h-4 w-4" />
               <span>Add Claim</span>
             </button>
