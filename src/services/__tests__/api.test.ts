@@ -1,28 +1,31 @@
-// Mock modules first before any imports
-const mockAxiosInstance = {
-  get: jest.fn(),
-  post: jest.fn(),
-  put: jest.fn(),
-  patch: jest.fn(),
-  delete: jest.fn(),
-  interceptors: {
-    request: {
-      use: jest.fn(),
+// Mock axios before any imports
+jest.mock('axios', () => {
+  const mockAxiosInstance = {
+    get: jest.fn(),
+    post: jest.fn(),
+    put: jest.fn(),
+    patch: jest.fn(),
+    delete: jest.fn(),
+    interceptors: {
+      request: {
+        use: jest.fn(),
+      },
+      response: {
+        use: jest.fn(),
+      },
     },
-    response: {
-      use: jest.fn(),
-    },
-  },
-}
-
-jest.mock('axios', () => ({
-  create: jest.fn(() => mockAxiosInstance),
-}))
+  }
+  
+  return {
+    create: jest.fn(() => mockAxiosInstance),
+  }
+})
 
 import axios, { AxiosResponse } from 'axios'
 import { apiService } from '../api'
 
 const mockedAxios = axios as jest.Mocked<typeof axios>
+const mockAxiosInstance = (axios.create as jest.Mock).mock.results[0]?.value
 
 // Mock window.location for redirect tests
 const mockLocation = {

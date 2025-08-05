@@ -318,7 +318,11 @@ describe('KnowledgeGraph', () => {
       const largeNodes = Array.from({ length: 100 }, (_, i) => ({
         ...mockNodes[0],
         id: `node${i}`,
-        label: `Node ${i}`
+        label: `Node ${i}`,
+        data: {
+          ...mockNodes[0].data,
+          id: `node${i}`
+        }
       }))
       
       const largeGraphData = {
