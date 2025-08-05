@@ -5,14 +5,10 @@ import {
   Search as SearchIcon, 
   Filter, 
   Save, 
-  TrendingUp, 
-  Clock, 
-  Settings,
+  TrendingUp,
   X,
   Sparkles,
-  BarChart3,
-  Download,
-  RefreshCw
+  Download
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
