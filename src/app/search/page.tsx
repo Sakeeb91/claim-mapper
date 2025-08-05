@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { 
   Search as SearchIcon, 
   Filter, 
@@ -26,7 +26,7 @@ import { useSearchStore } from '@/store/searchStore';
 import { SearchQuery, SearchResult, SavedSearch } from '@/types/search';
 import { SearchService } from '@/services/searchApi';
 
-export default function SearchPage() {
+function SearchPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
@@ -554,5 +554,17 @@ export default function SearchPage() {
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    }>
+      <SearchPageContent />
+    </Suspense>
   );
 }
