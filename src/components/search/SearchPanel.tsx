@@ -27,11 +27,20 @@ export function SearchPanel({ searchQuery, onSearchChange }: SearchPanelProps) {
   };
 
   const toggleFilter = (category: string, value: string) => {
+    const filterValue = activeFilters[category as keyof typeof activeFilters];
+    
+    // Handle different filter types
+    if (category === 'confidence' || category === 'dateRange') {
+      // Skip for non-array filters
+      return;
+    }
+    
+    const currentValues = filterValue as string[];
     const newFilters = {
       ...activeFilters,
-      [category]: activeFilters[category as keyof typeof activeFilters].includes(value)
-        ? (activeFilters[category as keyof typeof activeFilters] as string[]).filter(item => item !== value)
-        : [...(activeFilters[category as keyof typeof activeFilters] as string[]), value]
+      [category]: currentValues.includes(value)
+        ? currentValues.filter(item => item !== value)
+        : [...currentValues, value]
     };
     setActiveFilters(newFilters);
     

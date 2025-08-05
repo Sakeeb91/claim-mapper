@@ -233,16 +233,16 @@ export function SearchFilters({
           </div>
           
           {/* Confidence Histogram */}
-          {facets.confidenceRanges.histogram.length > 0 && (
+          {facets.confidenceRanges.length > 0 && facets.confidenceRanges[0].histogram && facets.confidenceRanges[0].histogram.length > 0 && (
             <div className="mt-3">
               <div className="text-xs text-muted-foreground mb-2">Distribution</div>
               <div className="flex items-end space-x-1 h-8">
-                {facets.confidenceRanges.histogram.map((bin, index) => (
+                {facets.confidenceRanges[0].histogram.map((bin: { value: number; count: number }, index: number) => (
                   <div
                     key={index}
                     className="bg-muted flex-1 rounded-sm"
                     style={{
-                      height: `${(bin.count / Math.max(...facets.confidenceRanges.histogram.map(b => b.count))) * 100}%`
+                      height: `${(bin.count / Math.max(...facets.confidenceRanges[0].histogram.map((b: { count: number }) => b.count))) * 100}%`
                     }}
                     title={`${bin.value}%: ${bin.count} items`}
                   />

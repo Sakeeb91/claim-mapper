@@ -278,7 +278,11 @@ export function UniversalSearchBar({
                 {suggestions.map((suggestion, index) => (
                   <div
                     key={suggestion.id}
-                    ref={(el) => (suggestionRefs.current[index] = el)}
+                    ref={(el) => {
+                      if (suggestionRefs.current) {
+                        suggestionRefs.current[index] = el;
+                      }
+                    }}
                     onClick={() => handleSuggestionSelect(suggestion)}
                     className={clsx(
                       "flex items-center space-x-2 px-2 py-2 rounded cursor-pointer",
@@ -317,7 +321,11 @@ export function UniversalSearchBar({
                   return (
                     <div
                       key={`recent-${index}`}
-                      ref={(el) => (suggestionRefs.current[suggestionIndex] = el)}
+                      ref={(el) => {
+                        if (suggestionRefs.current) {
+                          suggestionRefs.current[suggestionIndex] = el;
+                        }
+                      }}
                       onClick={() => handleSuggestionSelect(item)}
                       className={clsx(
                         "flex items-center space-x-2 px-2 py-2 rounded cursor-pointer",
