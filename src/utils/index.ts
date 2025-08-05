@@ -75,7 +75,7 @@ export function clamp(value: number, min: number, max: number): number {
 
 // Array utilities
 export function unique<T>(array: T[]): T[] {
-  return [...new Set(array)];
+  return Array.from(new Set(array));
 }
 
 export function groupBy<T, K extends keyof T>(array: T[], key: K): Record<string, T[]> {
