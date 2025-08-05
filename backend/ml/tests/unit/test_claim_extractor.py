@@ -15,7 +15,7 @@ class TestClaimExtractor:
     """Test cases for ClaimExtractor class."""
 
     @pytest.fixture
-    async def claim_extractor(self, mock_spacy_model, mock_sentence_transformer, mock_openai_client):
+    def claim_extractor(self, mock_spacy_model, mock_sentence_transformer, mock_openai_client):
         """Create ClaimExtractor instance with mocked dependencies."""
         with patch('spacy.load', return_value=mock_spacy_model), \
              patch('sentence_transformers.SentenceTransformer', return_value=mock_sentence_transformer), \
