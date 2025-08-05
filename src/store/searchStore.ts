@@ -103,13 +103,13 @@ const defaultFacets: SearchFacets = {
   tags: [],
   sources: [],
   dateRanges: [],
-  confidenceRanges: {
+  confidenceRanges: [{
     min: 0,
     max: 100,
     selectedMin: 0,
     selectedMax: 100,
     histogram: [],
-  },
+  }],
   locations: [],
 };
 

@@ -6,7 +6,7 @@ export function useWebSocket(userId?: string) {
 
   useEffect(() => {
     if (!isConnected.current) {
-      websocketService.connect(userId);
+      websocketService.connect(userId || 'anonymous');
       isConnected.current = true;
     }
 

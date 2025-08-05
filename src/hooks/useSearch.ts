@@ -215,11 +215,11 @@ export function useSearch(options: UseSearchOptions = {}): UseSearchReturn {
 
   // Save current search
   const saveSearch = useCallback(
-    async (name: string, description?: string) => {
+    async (name: string, description?: string): Promise<void> => {
       if (!query.text.trim()) {
         throw new Error('Cannot save empty search');
       }
-      return saveSearchMutation.mutateAsync({ name, description });
+      await saveSearchMutation.mutateAsync({ name, description });
     },
     [query.text, saveSearchMutation]
   );
@@ -274,7 +274,7 @@ export function useSemanticSearch(): UseSemanticSearchReturn {
   );
 
   const searchSemantic = useCallback(
-    async (query: string, options: Partial<SemanticSearchRequest> = {}) => {
+    async (query: string, options: Partial<SemanticSearchRequest> = {}): Promise<void> => {
       if (!semanticEnabled) {
         throw new Error('Semantic search is not enabled');
       }
@@ -288,7 +288,7 @@ export function useSemanticSearch(): UseSemanticSearchReturn {
         ...options,
       };
 
-      return semanticSearchMutation.mutateAsync(request);
+      await semanticSearchMutation.mutateAsync(request);
     },
     [semanticEnabled, semanticSearchMutation]
   );

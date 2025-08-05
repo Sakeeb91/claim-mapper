@@ -604,7 +604,7 @@ export const useAppStore = create<AppState & AppActions>()(
     }),
     {
       name: 'claim-mapper-store',
-      partialize: (state) => ({
+      partialize: (state: AppState & AppActions) => ({
         user: state.user,
         // Don't persist real-time collaboration data
       }),
