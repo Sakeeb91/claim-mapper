@@ -7,7 +7,7 @@ import { useAppStore } from '@/store/useAppStore';
 
 export function GraphVisualization({ selectedClaim, searchQuery, onNodeSelect }: GraphVisualizationProps) {
   const svgRef = useRef<SVGSVGElement>(null);
-  const { graphData, loadGraphData } = useAppStore();
+  const { graphData, loadGraphData, claims, setGraphData } = useAppStore();
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
 
   useEffect(() => {
@@ -27,11 +27,52 @@ export function GraphVisualization({ selectedClaim, searchQuery, onNodeSelect }:
     loadGraphData(selectedClaim || undefined);
   }, [selectedClaim, loadGraphData]);
 
+  // Update graph when claims change
   useEffect(() => {
-    if (!svgRef.current || !graphData.nodes.length) return;
+    if (claims.length > 0 && !selectedClaim) {
+      // Convert claims to graph nodes
+      const nodes: GraphNode[] = claims.map(claim => ({
+        id: claim.id,
+        type: 'claim' as const,
+        label: claim.text.length > 50 ? claim.text.substring(0, 50) + '...' : claim.text,
+        size: 15 + (claim.confidence * 10),
+        color: claim.type === 'hypothesis' ? '#3b82f6' : 
+               claim.type === 'assertion' ? '#10b981' : '#f59e0b',
+        confidence: claim.confidence,
+        data: claim
+      }));
 
+      // Create links between related claims (you can customize this logic)
+      const links: GraphLink[] = [];
+      
+      // Add evidence links between claims
+      // Note: evidence array contains Evidence objects, not claim IDs
+      // For now, we'll skip auto-linking until we have proper evidence-to-claim mapping
+
+      setGraphData({ nodes, links });
+    } else if (claims.length === 0) {
+      // Clear graph if no claims
+      setGraphData({ nodes: [], links: [] });
+    }
+  }, [claims, selectedClaim, setGraphData]);
+
+  useEffect(() => {
+    if (!svgRef.current) return;
+    
     const svg = d3.select(svgRef.current);
     svg.selectAll('*').remove();
+    
+    if (!graphData.nodes.length) {
+      // Show empty state message
+      svg.append('text')
+        .attr('x', dimensions.width / 2)
+        .attr('y', dimensions.height / 2)
+        .attr('text-anchor', 'middle')
+        .attr('font-size', '14px')
+        .attr('fill', '#999')
+        .text('Add claims to see the knowledge graph');
+      return;
+    }
 
     const { width, height } = dimensions;
 
@@ -177,8 +218,9 @@ export function GraphVisualization({ selectedClaim, searchQuery, onNodeSelect }:
         <button
           onClick={() => {
             const svg = d3.select(svgRef.current);
+            const zoom = d3.zoom<SVGSVGElement, unknown>();
             svg.transition().call(
-              d3.zoom<SVGSVGElement, unknown>().transform,
+              zoom.transform as any,
               d3.zoomIdentity
             );
           }}
