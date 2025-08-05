@@ -371,8 +371,50 @@ export class WebSocketService {
     this.emit('session_chat', { sessionId, message });
   }
 
+  // Document collaboration methods
+  public joinDocument(documentId: string) {
+    this.emit('join_document', { documentId });
+  }
+
+  public leaveDocument(documentId: string) {
+    this.emit('leave_document', { documentId });
+  }
+
+  public sendCursorPosition(documentId: string, position: { line: number; column: number }) {
+    this.emit('cursor_position', { documentId, position });
+  }
+
+  public sendTextChange(documentId: string, change: { text: string; position: number }) {
+    this.emit('text_change', { documentId, change });
+  }
+
+  public sendComment(documentId: string, comment: { text: string; position: { x: number; y: number } }) {
+    this.emit('comment', { documentId, comment });
+  }
+
+  // Event handler placeholders
+  public onUserJoined(callback: (data: any) => void) {
+    this.socket?.on('user_joined', callback);
+  }
+
+  public onUserLeft(callback: (data: any) => void) {
+    this.socket?.on('user_left', callback);
+  }
+
+  public onCursorPositionUpdate(callback: (data: any) => void) {
+    this.socket?.on('cursor_position_update', callback);
+  }
+
+  public onTextChangeUpdate(callback: (data: any) => void) {
+    this.socket?.on('text_change_update', callback);
+  }
+
+  public onNewComment(callback: (data: any) => void) {
+    this.socket?.on('new_comment', callback);
+  }
+
   public pingServer() {
-    this.emit('ping');
+    this.emit('ping', {});
   }
 
   // Start periodic ping to keep connection alive
