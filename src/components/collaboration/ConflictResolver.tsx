@@ -18,9 +18,10 @@ import { Modal } from '@/components/ui/Modal';
 interface ConflictResolverProps {
   conflicts: ConflictResolution[];
   claimId: string;
+  onClose?: () => void;
 }
 
-export function ConflictResolver({ conflicts, claimId }: ConflictResolverProps) {
+export function ConflictResolver({ conflicts, claimId, onClose }: ConflictResolverProps) {
   const [selectedConflict, setSelectedConflict] = useState<ConflictResolution>(conflicts[0]);
   const [resolutionStrategy, setResolutionStrategy] = useState<'merge' | 'overwrite' | 'manual_review'>('merge');
   const [resolutionNotes, setResolutionNotes] = useState('');
@@ -80,8 +81,8 @@ export function ConflictResolver({ conflicts, claimId }: ConflictResolverProps) 
   };
 
   return (
-    <Modal onClose={() => {}} className="max-w-4xl">
-      <div className="flex h-[600px]">
+    <Modal isOpen={true} onClose={onClose || (() => {})} size="xl" title="Conflict Resolution">
+      <div className="flex h-[550px]">
         {/* Conflicts list */}
         <div className="w-1/3 border-r">
           <div className="border-b p-4">

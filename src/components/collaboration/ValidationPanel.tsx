@@ -122,8 +122,8 @@ export function ValidationPanel({ claimId, onClose }: ValidationPanelProps) {
   };
 
   return (
-    <Modal onClose={onClose} className="max-w-4xl">
-      <div className="flex h-[600px] flex-col">
+    <Modal isOpen={true} onClose={onClose} size="xl" title="Claim Validation">
+      <div className="flex h-[550px] flex-col">
         {/* Header */}
         <div className="flex items-center justify-between border-b p-6">
           <div>

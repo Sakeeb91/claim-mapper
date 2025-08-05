@@ -285,8 +285,9 @@ export function KnowledgeGraph({
   // Method to reset zoom/pan
   const resetView = useCallback(() => {
     const svg = d3.select(svgRef.current);
+    const zoom = d3.zoom<SVGSVGElement, unknown>();
     svg.transition().duration(750).call(
-      d3.zoom<SVGSVGElement, unknown>().transform,
+      zoom.transform as any,
       d3.zoomIdentity
     );
   }, []);

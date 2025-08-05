@@ -109,6 +109,18 @@ describe('KnowledgeGraph', () => {
       confidence: 0.9,
       x: 100,
       y: 100,
+      color: '#3b82f6',
+      data: {
+        id: 'node1',
+        text: 'Climate Change is Real',
+        type: 'hypothesis',
+        confidence: 0.9,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        tags: [],
+        evidence: [],
+        reasoning: [],
+      },
     },
     {
       id: 'node2',
@@ -118,6 +130,16 @@ describe('KnowledgeGraph', () => {
       confidence: 0.8,
       x: 200,
       y: 150,
+      color: '#10b981',
+      data: {
+        id: 'node2',
+        text: 'Temperature Data',
+        type: 'supporting',
+        source: 'NOAA',
+        reliability: 0.8,
+        claimId: 'node1',
+        createdAt: new Date(),
+      },
     },
     {
       id: 'node3',
@@ -126,6 +148,14 @@ describe('KnowledgeGraph', () => {
       size: 18,
       x: 150,
       y: 200,
+      color: '#f59e0b',
+      data: {
+        id: 'node3',
+        steps: [],
+        claimId: 'node1',
+        type: 'deductive',
+        createdAt: new Date(),
+      },
     },
   ]
 
@@ -156,7 +186,9 @@ describe('KnowledgeGraph', () => {
   }
 
   const mockLayout: GraphLayout = {
-    type: 'force',
+    name: 'force',
+    label: 'Force-Directed',
+    description: 'Standard force-directed layout',
     forces: {
       link: { distance: 100, strength: 1 },
       charge: { strength: -300 },
@@ -297,7 +329,9 @@ describe('KnowledgeGraph', () => {
 
   it('handles different layout configurations', () => {
     const customLayout: GraphLayout = {
-      type: 'force',
+      name: 'custom',
+      label: 'Custom Layout',
+      description: 'Custom force-directed layout',
       forces: {
         link: { distance: 50, strength: 0.5 },
         charge: { strength: -500 },

@@ -99,8 +99,8 @@ export function VersionHistory({ claimId, onClose }: VersionHistoryProps) {
   };
 
   return (
-    <Modal onClose={onClose} className="max-w-6xl">
-      <div className="flex h-[700px]">
+    <Modal isOpen={true} onClose={onClose} size="xl" title="Version History">
+      <div className="flex h-[600px]">
         {/* Sidebar - Version List */}
         <div className="w-1/3 border-r">
           {/* Header */}
