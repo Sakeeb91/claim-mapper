@@ -205,7 +205,7 @@ export default function ExplorePage() {
           ) : (
             <KnowledgeGraph
               data={graphData}
-              selectedNodeId={selectedNode}
+              selectedNodeId={selectedNode || undefined}
               onNodeSelect={handleNodeSelect}
               onNodeDoubleClick={handleNodeDoubleClick}
               filters={graphFilters}

@@ -369,7 +369,7 @@ export default function SearchPage() {
                   searches={savedSearches}
                   onSearchSelect={handleLoadSavedSearch}
                   onSearchDelete={deleteSearch}
-                  onSearchUpdate={updateSearch}
+                  onSearchUpdate={(search) => updateSearch({ id: search.id, updates: search })}
                   currentUserId="current-user" // Replace with actual user ID
                 />
               </div>
