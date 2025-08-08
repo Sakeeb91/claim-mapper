@@ -330,7 +330,13 @@ describe('KnowledgeGraph', () => {
         links: []
       }
       
-      render(<KnowledgeGraph {...defaultProps} data={largeGraphData} />)
+      // Need to show isolated nodes for this test
+      const filtersWithIsolated = {
+        ...mockFilters,
+        showIsolated: true
+      }
+      
+      render(<KnowledgeGraph {...defaultProps} data={largeGraphData} filters={filtersWithIsolated} />)
       expect(screen.getByText('100 nodes, 0 connections')).toBeInTheDocument()
     })
   })
