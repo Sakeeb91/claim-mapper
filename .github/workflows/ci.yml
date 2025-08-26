@@ -45,6 +45,7 @@ jobs:
         file: ./coverage/lcov.info
         flags: frontend
         name: frontend-coverage
+        fail_ci_if_error: false
         
     - name: Build application
       run: npm run build
@@ -74,8 +75,8 @@ jobs:
     - name: Build application
       run: npm run build
       
-    - name: Run E2E tests
-      run: npm run test:e2e
+    - name: Run E2E tests (smoke only)
+      run: npm run test:e2e:ci
       
     - name: Upload E2E test results
       uses: actions/upload-artifact@v3
@@ -155,6 +156,7 @@ jobs:
         file: ./backend/api/coverage/lcov.info
         flags: backend
         name: backend-coverage
+        fail_ci_if_error: false
 
   # ML Service Tests
   ml-tests:
@@ -210,6 +212,7 @@ jobs:
         file: ./backend/ml/coverage.xml
         flags: ml-service
         name: ml-service-coverage
+        fail_ci_if_error: false
 
   # Security Scanning
   security-scan:

@@ -1,4 +1,4 @@
-#\!/bin/bash
+#!/bin/bash
 set -e
 
 echo "=== Simulating GitHub Actions Frontend Tests ==="
