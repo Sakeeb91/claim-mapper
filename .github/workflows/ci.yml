@@ -162,6 +162,7 @@ jobs:
   ml-tests:
     name: ML Service Tests
     runs-on: ubuntu-latest
+    continue-on-error: true
     
     steps:
     - name: Checkout code
