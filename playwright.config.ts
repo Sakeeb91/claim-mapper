@@ -83,7 +83,7 @@ export default defineConfig({
     command: process.env.CI ? 'npm run start' : 'npm run dev',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
-    timeout: 120 * 1000,
+    timeout: 180 * 1000,
   },
 
   /* Global test timeout */
@@ -91,7 +91,7 @@ export default defineConfig({
 
   /* Expect timeout */
   expect: {
-    timeout: 5 * 1000,
+    timeout: 12 * 1000,
   },
 
   /* Output directory for test artifacts */

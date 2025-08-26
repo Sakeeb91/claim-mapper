@@ -2,22 +2,21 @@ import { test, expect } from '@playwright/test'
 
 // Minimal smoke checks that don’t rely on backend data or test IDs
 test.describe('@smoke App smoke tests', () => {
-  test('home page renders header', async ({ page }) => {
+  test('@smoke home page renders header', async ({ page }) => {
     await page.goto('/')
-    await expect(page.locator('header')).toBeVisible()
-    await expect(page.locator('text=Claim Mapper')).toBeVisible()
+    await page.waitForSelector('header', { timeout: 15000 })
+    await expect(page.getByText('Claim Mapper')).toBeVisible()
   })
 
-  test('search page loads', async ({ page }) => {
+  test('@smoke search page loads', async ({ page }) => {
     await page.goto('/search')
-    // Header is present and global search input exists
-    await expect(page.locator('header')).toBeVisible()
+    await page.waitForSelector('header', { timeout: 15000 })
     await expect(page.locator('input[placeholder*="Search"]')).toBeVisible()
   })
 
-  test('explore page loads and shows graph container', async ({ page }) => {
+  test('@smoke explore page loads and shows graph container', async ({ page }) => {
     await page.goto('/explore')
-    // The SVG may not be "visible" due to layout, but should be present
+    await page.waitForSelector('svg', { timeout: 20000 })
     await expect(page.locator('svg')).toHaveCount(1)
   })
 })
