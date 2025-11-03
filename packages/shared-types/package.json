@@ -1,0 +1,18 @@
+{
+  "name": "@claim-mapper/shared-types",
+  "version": "0.1.0",
+  "description": "Shared TypeScript type definitions for Claim Mapper",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "clean": "rm -rf dist"
+  },
+  "keywords": ["types", "typescript", "claim-mapper"],
+  "author": "Sakeeb Rahman",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.2.2"
+  }
+}
