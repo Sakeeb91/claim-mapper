@@ -4,51 +4,67 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Claim Mapper is an interactive knowledge graph visualization system for claims, evidence, and reasoning chains. It's a full-stack application combining a Next.js frontend with TypeScript/Express.js backend services and a Python ML service for AI-powered claim analysis.
+Claim Mapper is an interactive knowledge graph visualization system for claims, evidence, and reasoning chains. It's a full-stack application with a Next.js frontend, Express.js backend API, Socket.io WebSocket server, and Python FastAPI ML service for AI-powered claim analysis.
+
+**Recent Reorganization (2025-11-03)**: The codebase has been comprehensively restructured for better maintainability:
+- Centralized constants (`src/constants/`, `backend/api/src/constants/`)
+- Shared types package (`packages/shared-types/`)
+- Business logic separation (`src/lib/`, `backend/api/src/lib/`)
+- Barrel exports via index files for cleaner imports
+- Consolidated documentation in `docs/` directory
+- Reorganized ML test structure and examples
 
 ## Architecture
 
 ### Multi-Service Architecture
-- **Frontend**: Next.js 14 + TypeScript + Tailwind CSS + D3.js
-- **API Server**: Express.js + TypeScript + MongoDB + Redis
-- **WebSocket Server**: Socket.io for real-time collaboration
-- **ML Service**: Python FastAPI with NLP models (transformers, spaCy, etc.)
-- **Databases**: MongoDB (primary), Redis (cache/sessions)
+- **Frontend**: Next.js 14 (App Router) + TypeScript + Tailwind CSS + D3.js (port 3000)
+- **API Server**: Express.js + TypeScript + MongoDB + Redis (port 8000)
+- **WebSocket Server**: Socket.io for real-time collaboration (port 8001)
+- **ML Service**: Python FastAPI with NLP models - transformers, spaCy, sentence-transformers (port 8002)
+- **Databases**: MongoDB (port 27017), Redis (port 6379)
 
 ### Key Technologies
-- **Visualization**: D3.js for interactive force-directed graphs
-- **State Management**: Zustand (frontend)
-- **Real-time**: Socket.io for collaborative editing
-- **AI/ML**: OpenAI GPT, Anthropic Claude, sentence-transformers, spaCy
-- **Containerization**: Docker with docker-compose for development
+- **Visualization**: D3.js force-directed graphs in `src/components/graph/`
+- **State Management**: Zustand stores in `src/store/` (frontend), MongoDB + Redis (backend)
+- **Real-time**: Socket.io for collaborative editing, live cursors, comments
+- **AI/ML**: OpenAI GPT, Anthropic Claude integration, sentence-transformers, spaCy NER
+- **Forms & Validation**: React Hook Form + Zod validation
+- **Authentication**: JWT-based with bcrypt hashing
+- **Containerization**: Docker Compose for development orchestration
 
-## Development Commands
+## Development Setup & Commands
 
 ### Quick Start
 ```bash
-# Start full development environment
+# Automated setup (recommended first time)
+chmod +x scripts/setup.sh && ./scripts/setup.sh
+
+# Or start all services with Docker
 npm run docker:dev
 
-# Manual setup alternative
-chmod +x scripts/setup.sh && ./scripts/setup.sh
+# Manual alternative (run in separate terminals)
+npm run dev              # Frontend only
+cd backend/api && npm run dev   # API only
+docker run -d -p 27017:27017 mongo:7.0
+docker run -d -p 6379:6379 redis:7.2-alpine
 ```
 
 ### Frontend Development
 ```bash
-npm run dev              # Start Next.js dev server (port 3000)
-npm run build            # Build for production
+npm run dev              # Next.js dev server with hot reload (port 3000)
+npm run build            # Production build
 npm run start            # Start production server
 npm run lint             # ESLint
-npm run type-check       # TypeScript checking
+npm run type-check       # TypeScript type checking
 npm run format           # Prettier formatting
 ```
 
 ### Backend API Development
 ```bash
 cd backend/api
-npm run dev              # Start API dev server (port 8000)
-npm run build            # Compile TypeScript
-npm run test             # Run Jest tests
+npm run dev              # API dev server with tsx watch (port 8000)
+npm run build            # Compile TypeScript to dist/
+npm run start            # Run compiled production server
 npm run lint             # ESLint for backend
 npm run format           # Prettier for backend
 ```
@@ -56,150 +72,302 @@ npm run format           # Prettier for backend
 ### ML Service Development
 ```bash
 cd backend/ml
-# Python service runs on port 8002
-pip install -r requirements.txt
-python main.py           # Start FastAPI server
-pytest                   # Run Python tests
+pip install -r requirements.txt      # Install dependencies
+python -m spacy download en_core_web_sm  # Download required spaCy model
+uvicorn main:app --host 0.0.0.0 --port 8002 --reload  # Start with auto-reload
+python main.py           # Alternative: run directly
+
+# Code quality
 black .                  # Format Python code
 flake8 .                 # Lint Python code
 mypy .                   # Type checking
 ```
 
-### Docker Operations
+### Testing
+
+#### Frontend Tests
 ```bash
-npm run docker:build                                    # Build all images
-docker-compose -f docker-compose.dev.yml up            # Start all services
-docker-compose -f docker-compose.dev.yml down          # Stop all services
-docker-compose -f docker-compose.dev.yml logs -f api   # View API logs
+npm run test             # Run all Jest tests
+npm run test:watch       # Watch mode for development
+npm run test:coverage    # Generate coverage report
+npm run test:ci          # CI mode (no watch, with coverage)
 ```
 
-### Service Ports
-- Frontend: http://localhost:3000
-- API: http://localhost:8000  
-- WebSocket: ws://localhost:8001
-- ML Service: http://localhost:8002
-- MongoDB: mongodb://localhost:27017
-- Redis: redis://localhost:6379
+#### Backend API Tests
+```bash
+cd backend/api
+npm run test             # All tests
+npm run test:unit        # Unit tests only
+npm run test:integration # Integration tests only
+npm run test:watch       # Watch mode
+npm run test:coverage    # Coverage report
+npm run test:ci          # CI mode
+```
 
-## Code Architecture & Patterns
+#### ML Service Tests
+```bash
+cd backend/ml
+pytest                   # All tests
+pytest tests/unit/       # Unit tests only
+pytest tests/integration/ # Integration tests only
+pytest --cov=services    # With coverage
+pytest --cov=services --cov-report=html  # HTML coverage report
+pytest -v                # Verbose output
+pytest -m "not external" # Skip external API tests
+```
+
+#### E2E Tests
+```bash
+npm run test:e2e         # Run all Playwright E2E tests
+npm run test:e2e:ui      # Interactive UI mode
+npm run test:e2e:ci      # Smoke tests only (Chromium, for CI)
+npx playwright install   # Install browser dependencies (first time)
+```
+
+### Docker Operations
+```bash
+npm run docker:dev       # Start all services
+npm run docker:build     # Build all images
+docker-compose -f docker-compose.dev.yml up          # Start services
+docker-compose -f docker-compose.dev.yml up -d       # Start in background
+docker-compose -f docker-compose.dev.yml down        # Stop all services
+docker-compose -f docker-compose.dev.yml logs -f api # View API logs
+docker-compose -f docker-compose.dev.yml ps          # Check service status
+```
+
+## Code Architecture
 
 ### Frontend Structure
-- **App Router**: Next.js 14 app directory structure
-- **Components**: Organized by feature (graph/, claims/, collaboration/, etc.)
-- **State**: Zustand stores in `src/store/`
-- **Types**: Shared TypeScript definitions in `src/types/`
-- **Services**: API clients and WebSocket handling in `src/services/`
+```
+src/
+├── app/              # Next.js 14 App Router pages and layouts
+├── components/       # React components organized by feature (all have index.ts)
+│   ├── ui/          # Reusable UI components (Button, Modal, Input, etc.)
+│   ├── graph/       # D3.js knowledge graph (KnowledgeGraph, GraphControls, etc.)
+│   ├── claims/      # Claim management components
+│   ├── search/      # Search UI (UniversalSearchBar, SearchResults, etc.)
+│   └── collaboration/ # Real-time (CollaborativeEditor, LiveCursors, etc.)
+├── constants/       # 🆕 Centralized constants
+│   ├── api.ts       # API URLs and endpoints
+│   ├── graph.ts     # Graph colors, sizes, config
+│   ├── routes.ts    # Application routes
+│   └── validation.ts # Validation limits
+├── hooks/           # Custom React hooks (with index.ts)
+├── lib/             # 🆕 Business logic layer
+│   ├── graph/       # layoutEngine.ts, filterEngine.ts
+│   ├── search/      # queryParser.ts
+│   └── validation/  # claimValidator.ts
+├── services/        # API clients and WebSocket (with index.ts)
+├── store/           # Zustand state management stores
+├── types/           # Shared TypeScript type definitions
+└── utils/           # Utility functions and helpers
+```
 
 ### Backend API Structure
-- **Routes**: Feature-based routing in `src/routes/` (claims.ts, graph.ts, etc.)
-- **Models**: Mongoose schemas in `src/models/` (Claim.ts, Evidence.ts, etc.)
-- **Middleware**: Express middleware in `src/middleware/`
-- **Database**: MongoDB connection config in `src/config/database.ts`
+```
+backend/api/src/
+├── constants/       # 🆕 Server constants
+│   ├── errors.ts    # Error messages and codes
+│   ├── status.ts    # HTTP and entity status codes
+│   └── validation.ts # Validation limits and patterns
+├── lib/             # 🆕 Business logic layer
+│   ├── graph/       # analyzer.ts (graph metrics, central nodes)
+│   ├── reasoning/   # Reasoning chain builders (TODO)
+│   └── validation/  # Validation schemas (TODO)
+├── middleware/      # Express middleware (auth, validation, etc.)
+├── models/          # Mongoose schemas (Claim.ts, Evidence.ts, etc.)
+├── routes/          # Express route handlers (claims.ts, graph.ts, etc.)
+├── config/          # Database and service configuration
+├── utils/           # Server-side utilities
+├── websocket/       # Socket.io WebSocket handlers
+└── server.ts        # Main Express application entry point
+```
 
 ### ML Service Structure
-- **FastAPI**: Main application in `main.py` with 6+ reasoning endpoints
-- **Services**: ML processing in `services/` (reasoning_engine.py, claim_extractor.py, etc.)
-- **Models**: Pydantic schemas in `models/schemas.py`
-- **Advanced Features**: Reasoning chain generation, fallacy detection, semantic analysis
+```
+backend/ml/
+├── main.py          # FastAPI application with 6+ reasoning endpoints
+├── examples/        # 🆕 Demo files (moved from root)
+│   ├── demo_service.py
+│   └── demo_advanced_reasoning.py
+├── services/        # NLP processing services
+│   ├── reasoning_engine.py    # Core reasoning logic with LLM integration
+│   ├── claim_extractor.py     # Claim extraction from text
+│   ├── argument_miner.py      # Argument structure analysis
+│   ├── semantic_analyzer.py   # Semantic similarity and relationships
+│   ├── entity_extractor.py    # Named entity recognition
+│   └── quality_scorer.py      # Claim quality assessment
+├── models/          # Pydantic schemas for request/response models
+├── tests/           # 🆕 Reorganized test structure
+│   ├── conftest.py  # Moved from root
+│   ├── fixtures/    # Test fixtures
+│   ├── unit/        # test_services.py, test_claim_extractor.py
+│   └── integration/ # test_reasoning_api.py, test_advanced_reasoning.py
+└── .env.example     # 🆕 Environment variables template
+```
 
-### Key Components
-- **D3.js Graphs**: Interactive force-directed visualizations in `src/components/graph/`
-- **Real-time Collaboration**: Socket.io integration for live editing
-- **Reasoning Engine**: Advanced NLP pipeline with LLM integration
-- **Graph Analysis**: NetworkX-based relationship analysis
+## Important Development Patterns
 
-## Important Patterns
-
-### State Management
-- Use Zustand for frontend state (`useAppStore`)
-- Backend state managed through MongoDB + Redis
-- Real-time updates via Socket.io WebSocket connections
-
-### Data Flow
-1. Frontend makes API calls to Express.js backend (port 8000)
-2. Backend queries MongoDB and communicates with ML service (port 8002)
-3. ML service processes with transformers/spaCy and returns analysis
-4. Real-time updates broadcast via WebSocket server (port 8001)
+### State Management & Data Flow
+1. **Frontend**: Zustand stores (`useAppStore`) for client state, React Query for server state caching
+2. **Backend**: MongoDB for persistence, Redis for sessions and real-time data
+3. **Real-time**: Socket.io WebSocket connections for live updates (cursors, comments, collaborative editing)
+4. **Data Flow**: Frontend → API (8000) → MongoDB/ML Service (8002) → WebSocket broadcast (8001) → All clients
 
 ### Testing Strategy
-- Frontend: No tests currently implemented
-- Backend API: Jest with TypeScript
-- ML Service: pytest with asyncio
-- Run tests: `npm test` (API) or `pytest` (ML)
+- **Frontend**: Jest + React Testing Library + MSW for API mocking (currently minimal tests)
+- **Backend API**: Jest + Supertest + MongoDB Memory Server + Redis mock
+- **ML Service**: pytest with asyncio, parametrized tests, mock models (avoid loading heavy transformers in tests)
+- **E2E**: Playwright with multi-browser support (Chrome, Firefox, Safari)
+- **Coverage Target**: 80%+ for new code, enforced by Codecov in CI
 
-### Code Style
-- TypeScript strict mode enabled
-- ESLint + Prettier configured for both frontend and backend
-- Python: Black formatter + flake8 linter + mypy type checking
-- Import organization: Absolute imports with path mapping
+### CI/CD Pipeline
+The GitHub Actions workflow (`.github/workflows/ci.yml`) runs:
+1. **Parallel test jobs**: frontend-tests, backend-tests, ml-tests (continue-on-error for ML)
+2. **E2E tests**: Smoke tests only on Chromium (after frontend tests pass)
+3. **Security scanning**: Trivy vulnerability scanner, npm audit
+4. **Performance tests**: Lighthouse CI (main branch only)
+5. **Build and deploy**: Creates deployment artifacts (main branch only)
+
+Check CI status after pushing:
+```bash
+gh run list --limit 5                # View recent workflow runs
+gh run view <run-id>                 # Check specific run status
+gh run view <run-id> --log-failed    # View failure logs
+```
+
+### Code Style & Quality
+- **TypeScript**: Strict mode enabled, absolute imports with path mapping
+- **ESLint + Prettier**: Configured for both frontend and backend
+- **Python**: Black formatter (line length 127) + flake8 linter + mypy type checking
+- **Commit Convention**: Conventional commits (feat:, fix:, docs:, style:, refactor:, test:, chore:)
 
 ### Environment Variables
-- Development: Uses docker-compose environment variables
-- Check `docker-compose.dev.yml` for service configuration
-- ML service uses `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` for LLM features
+- **Development**: Configured in `docker-compose.dev.yml`
+- **Example file**: `.env.example` (copy to `.env.local` for local dev)
+- **API Keys**: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` for ML service LLM features
+- **Database**: `MONGODB_URI`, `REDIS_URL`, `JWT_SECRET`
 
-## Key Files to Understand
+## Key Architecture Files
 
-### Critical Architecture Files
-- `src/components/graph/KnowledgeGraph.tsx` - Main D3.js visualization
-- `backend/api/src/server.ts` - Express.js application entry
-- `backend/ml/main.py` - FastAPI ML service with advanced reasoning
-- `backend/ml/services/reasoning_engine.py` - Core reasoning logic
-- `src/store/useAppStore.ts` - Frontend state management
+### Critical Components
+- `src/components/graph/KnowledgeGraph.tsx` - Main D3.js force-directed graph visualization
+- `backend/api/src/server.ts` - Express.js application entry point with middleware setup
+- `backend/ml/main.py` - FastAPI ML service with advanced reasoning endpoints
+- `backend/ml/services/reasoning_engine.py` - Core reasoning logic (fallacy detection, gap identification)
+- `src/store/useAppStore.ts` - Frontend Zustand state management
 
-### Configuration Files
-- `docker-compose.dev.yml` - Multi-service development setup
+### Configuration
+- `docker-compose.dev.yml` - Multi-service development orchestration (7 services)
 - `next.config.js` - Next.js configuration
 - `backend/api/tsconfig.json` - Backend TypeScript config
-- `backend/ml/requirements.txt` - Python dependencies
+- `backend/ml/requirements.txt` - Python ML dependencies
+- `backend/ml/.env.example` - 🆕 ML service environment variables template
+- `playwright.config.ts` - E2E test configuration
+- `jest.config.js` - Frontend/backend test configuration
+- `packages/shared-types/` - 🆕 Shared TypeScript type definitions
 
 ### Database Models
-- `backend/api/src/models/Claim.ts` - Claim data structure
-- `backend/api/src/models/Evidence.ts` - Evidence relationships
-- `backend/ml/models/schemas.py` - ML service Pydantic models
+- `backend/api/src/models/Claim.ts` - Claim schema (type, confidence, tags)
+- `backend/api/src/models/Evidence.ts` - Evidence relationships (support/contradict/neutral)
+- `backend/ml/models/schemas.py` - Pydantic models for ML service
 
-## Common Development Tasks
+## Service-Specific Notes
 
-### Adding New Features
-1. Define TypeScript interfaces in `src/types/`
-2. Add API routes in `backend/api/src/routes/`
-3. Create frontend components in appropriate `src/components/` subdirectory
-4. Update ML service if AI analysis needed in `backend/ml/services/`
-5. Add real-time updates via WebSocket if needed
+### WebSocket Server (port 8001)
+- Located in `backend/api/src/websocket/` (integrated with API server)
+- Handles real-time collaboration: live cursors, comments, version history
+- Uses Redis for session management and pub/sub
+- Socket.io events: claim updates, user presence, collaborative editing
 
-### Database Changes
-1. Update Mongoose models in `backend/api/src/models/`
-2. Add corresponding TypeScript types in `src/types/`
-3. Update ML service Pydantic schemas if needed
+### ML Service Advanced Features
+The ML service includes sophisticated reasoning capabilities:
+- **Fallacy Detection**: Regex pattern matching + LLM-based identification
+- **Logical Gap Identification**: Missing premises, unsupported conclusions
+- **Premise Strength Assessment**: Evidence quality scoring
+- **Reasoning Chain Generation**: Complete argument structure with LLM integration
+- **Multi-Claim Analysis**: Network-wide reasoning analysis
+- **Performance**: ~200-300ms per document, caching for expensive operations
 
-### Graph Visualization Changes
-1. Modify D3.js components in `src/components/graph/`
-2. Update graph data structures in backend models
-3. Ensure real-time updates work with Socket.io
+### D3.js Graph Visualization
+- Interactive force-directed graphs with drag, zoom, pan
+- Node types: claims (assertions, hypotheses, questions), evidence, reasoning steps
+- Link types: supports, contradicts, neutral
+- Filtering by type, confidence level, tags
+- Search integration with node highlighting
+- Performance consideration: virtualization needed for large datasets (>1000 nodes)
 
-## Development Notes
+## Documentation
 
-### ML Service Features
-The ML service (`backend/ml/`) includes advanced reasoning capabilities:
-- Fallacy detection with regex patterns
-- Logical gap identification
-- Premise strength assessment  
-- OpenAI GPT and Anthropic Claude integration
-- Comprehensive reasoning chain generation
+Comprehensive documentation is now organized in the `docs/` directory:
+- **Guides**: [Testing](docs/guides/testing.md), [Search Implementation](docs/guides/search.md)
+- **Architecture**: [ML Service](docs/architecture/ml-service.md), [Reasoning Features](docs/architecture/reasoning-features.md), [ML Implementation](docs/architecture/ml-implementation.md)
+- **Troubleshooting**: [CI/CD Fixes](docs/troubleshooting/ci-fixes.md)
 
-### Docker Development
-- All services run in Docker containers for development
-- Use `npm run docker:dev` for complete environment
-- Individual services can be started manually if needed
-- Check service health at `/health` endpoints
+See [docs/README.md](docs/README.md) for the complete documentation index.
 
-### Real-time Collaboration
-- Socket.io handles live cursors, comments, and collaborative editing
-- WebSocket server runs separately on port 8001
-- Redis used for session management and real-time data
+## Code Organization Best Practices
 
-### Performance Considerations
-- D3.js graphs can become complex with large datasets
-- ML service includes caching for expensive operations
-- Redis caching for frequently accessed data
-- Consider virtualization for large claim networks
+### Centralized Constants
+Import constants instead of hardcoding values throughout the codebase:
+
+```typescript
+// Frontend - src/constants/
+import { API_BASE_URL, ML_ENDPOINTS, NODE_COLORS, ROUTES, CLAIM_VALIDATION } from '@/constants';
+
+// Backend - backend/api/src/constants/
+import { ERROR_MESSAGES, HTTP_STATUS, VALIDATION_LIMITS } from './constants';
+```
+
+### Barrel Exports (Index Files)
+Use barrel exports for cleaner, more maintainable imports:
+
+```typescript
+// Before
+import { KnowledgeGraph } from '@/components/graph/KnowledgeGraph';
+import { GraphControls } from '@/components/graph/GraphControls';
+import { NodeDetailsPanel } from '@/components/graph/NodeDetailsPanel';
+
+// After
+import { KnowledgeGraph, GraphControls, NodeDetailsPanel } from '@/components/graph';
+```
+
+### Business Logic Separation
+Keep business logic separate from UI components and API routes in `lib/` directories:
+
+```typescript
+// Frontend business logic - src/lib/
+import { FilterEngine } from '@/lib/graph/filterEngine';
+import { QueryParser } from '@/lib/search/queryParser';
+import { ClaimValidator } from '@/lib/validation/claimValidator';
+
+// Backend business logic - backend/api/src/lib/
+import { GraphAnalyzer } from './lib/graph/analyzer';
+```
+
+### Shared Types Package
+Use centralized type definitions from the shared-types package:
+
+```typescript
+// Frontend or Backend
+import { Claim, Evidence, GraphNode, ApiResponse, PaginatedResponse } from '@claim-mapper/shared-types';
+
+// Ensures type consistency across all services
+```
+
+## Troubleshooting
+
+### Common Issues
+- **ML service not starting**: Ensure spaCy model downloaded (`python -m spacy download en_core_web_sm`)
+- **Database connection errors**: Check MongoDB/Redis containers running (`docker ps`)
+- **Port conflicts**: Check no other services on 3000, 8000, 8001, 8002
+- **E2E test failures**: Increase timeouts in `playwright.config.ts`, ensure services running
+- **Type errors after deps update**: Run `npm run type-check` and fix incrementally
+- **Coverage not generating**: Ensure jest/pytest runs with `--coverage` flag
+
+### Health Checks
+```bash
+curl http://localhost:8000/health    # API health
+curl http://localhost:8002/health    # ML service health
+docker-compose -f docker-compose.dev.yml ps  # All service status
+```
