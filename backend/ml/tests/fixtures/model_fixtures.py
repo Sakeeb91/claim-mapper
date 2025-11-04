@@ -3,9 +3,17 @@ Fixtures for ML model testing.
 """
 import pytest
 import numpy as np
-import torch
 from unittest.mock import MagicMock, AsyncMock
 from typing import Dict, List, Any
+
+# Try to import torch, but don't fail if it's not available (CI environment)
+try:
+    import torch
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
+    # Create a mock torch module for type hints
+    torch = MagicMock()
 
 
 @pytest.fixture

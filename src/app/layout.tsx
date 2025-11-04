@@ -1,12 +1,13 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
 import './globals.css';
 import { Providers } from '@/components/providers';
 import { Header } from '@/components/layout/Header';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Toaster } from 'react-hot-toast';
 
-const inter = Inter({ subsets: ['latin'] });
+// Use system fonts for better CI compatibility and faster loading
+// Google Fonts can be added via CSS if needed
+const fontClassName = 'font-sans';
 
 export const metadata: Metadata = {
   title: 'Claim Mapper - Interactive Knowledge Graph Visualization',
@@ -21,7 +22,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body className={fontClassName}>
         <Providers>
           <div className="flex h-screen bg-background">
             <Sidebar />
