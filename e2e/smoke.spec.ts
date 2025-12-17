@@ -11,7 +11,8 @@ test.describe('@smoke App smoke tests', () => {
   test('@smoke search page loads', async ({ page }) => {
     await page.goto('/search')
     await page.waitForSelector('header', { timeout: 15000 })
-    await expect(page.locator('input[placeholder*="Search"]')).toBeVisible()
+    // Use first() to handle multiple search inputs on the page
+    await expect(page.locator('input[placeholder*="Search"]').first()).toBeVisible()
   })
 
   test('@smoke explore page loads and shows graph container', async ({ page }) => {
