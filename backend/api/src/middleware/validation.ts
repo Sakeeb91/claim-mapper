@@ -263,6 +263,24 @@ export const validationSchemas = {
     }),
   }),
 
+  // Graph validation
+  graphQuery: Joi.object({
+    projectId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/),
+    claimIds: Joi.alternatives().try(
+      Joi.string().pattern(/^[0-9a-fA-F]{24}$/),
+      Joi.array().items(Joi.string().pattern(/^[0-9a-fA-F]{24}$/)).max(50)
+    ),
+    maxDepth: Joi.number().integer().min(1).max(5).default(2),
+    includeEvidence: Joi.boolean().default(true),
+    includeReasoning: Joi.boolean().default(false),
+    minConfidence: Joi.number().min(0).max(1),
+    types: Joi.alternatives().try(
+      Joi.string().valid('claim', 'evidence', 'reasoning'),
+      Joi.array().items(Joi.string().valid('claim', 'evidence', 'reasoning'))
+    ),
+    limit: Joi.number().integer().min(1).max(1000).default(500),
+  }),
+
   // Collaboration validation
   createSession: Joi.object({
     project: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).required(),
