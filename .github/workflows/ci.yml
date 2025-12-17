@@ -276,9 +276,8 @@ jobs:
       uses: treosh/lighthouse-ci-action@v10
       with:
         configPath: './lighthouserc.json'
-        uploadArtifacts: true
+        uploadArtifacts: false
         temporaryPublicStorage: true
-        artifactName: lighthouse-results-${{ github.run_id }}
 
   # Build and Deploy (only on main branch)
   build-and-deploy:
