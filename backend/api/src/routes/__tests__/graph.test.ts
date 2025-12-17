@@ -413,8 +413,8 @@ describe('Graph API', () => {
 
   describe('Query Validation', () => {
     it('should require either projectId or claimIds', () => {
-      const query = {};
-      const isValid = query.hasOwnProperty('projectId') || query.hasOwnProperty('claimIds');
+      const query: Record<string, unknown> = {};
+      const isValid = 'projectId' in query || 'claimIds' in query;
 
       expect(isValid).toBe(false);
     });
