@@ -47,6 +47,47 @@ export const VALIDATION_LIMITS = {
   DEFAULT_PAGE: 1,
   DEFAULT_PAGE_SIZE: 20,
   MAX_PAGE_SIZE: 100,
+
+  // Evidence-specific limits
+  EVIDENCE_CACHE_TTL: 300, // 5 minutes in seconds
+  EVIDENCE_MAX_ANNOTATIONS: 50,
+  EVIDENCE_MAX_RELATIONSHIPS: 20,
+} as const;
+
+export const EVIDENCE_TYPES = [
+  'empirical',
+  'statistical',
+  'testimonial',
+  'expert',
+  'documented',
+  'anecdotal',
+] as const;
+
+export const EVIDENCE_SOURCE_TYPES = [
+  'document',
+  'url',
+  'database',
+  'survey',
+  'interview',
+  'observation',
+] as const;
+
+export const VERIFICATION_STATUSES = [
+  'unverified',
+  'verified',
+  'disputed',
+  'retracted',
+] as const;
+
+export const EVIDENCE_ERROR_MESSAGES = {
+  NOT_FOUND: 'Evidence not found',
+  ACCESS_DENIED: 'Access denied to this evidence',
+  PROJECT_MISMATCH: 'Evidence does not belong to the specified project',
+  CLAIM_NOT_FOUND: 'One or more claims not found',
+  ALREADY_VERIFIED: 'Evidence is already verified',
+  CANNOT_MODIFY_RETRACTED: 'Cannot modify retracted evidence',
+  MAX_ANNOTATIONS_REACHED: 'Maximum number of annotations reached',
+  MAX_RELATIONSHIPS_REACHED: 'Maximum number of relationships reached',
 } as const;
 
 export const REGEX_PATTERNS = {
