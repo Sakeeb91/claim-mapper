@@ -1348,4 +1348,109 @@ router.post('/:id/claims',
   })
 );
 
+/**
+ * PUT /api/evidence/:id/quality - Update evidence quality assessment
+ *
+ * Body:
+ * - overallScore: 0-1 (optional)
+ * - clarityScore: 0-1 (optional)
+ * - completenessScore: 0-1 (optional)
+ * - issues: Array of quality issues (optional)
+ * - recommendations: Array of improvement suggestions (optional)
+ */
+router.put('/:id/quality',
+  authenticate,
+  validate(validationSchemas.objectId, 'params'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { overallScore, clarityScore, completenessScore, issues, recommendations } = req.body;
+
+    // Find evidence
+    const evidence = await Evidence.findOne({ _id: id, isActive: true })
+      .populate('project', 'owner collaborators');
+
+    if (!evidence) {
+      throw createError(
+        EVIDENCE_ERROR_MESSAGES.NOT_FOUND,
+        404,
+        'EVIDENCE_NOT_FOUND'
+      );
+    }
+
+    // Only project owner or admins can update quality scores
+    const userId = req.user!._id.toString();
+    const project = evidence.project as any;
+    const canUpdateQuality = project.owner.toString() === userId ||
+      project.collaborators.some((c: any) =>
+        c.user.toString() === userId && (c.role === 'admin' || c.role === 'reviewer')
+      );
+
+    if (!canUpdateQuality) {
+      throw createError(
+        'Only project owners, admins, or reviewers can update quality scores',
+        403,
+        'QUALITY_UPDATE_DENIED'
+      );
+    }
+
+    // Validate and update quality scores
+    const validateScore = (score: any): number | undefined => {
+      if (score === undefined) return undefined;
+      const num = parseFloat(score);
+      if (isNaN(num) || num < 0 || num > 1) {
+        throw createError(
+          'Quality scores must be between 0 and 1',
+          400,
+          'INVALID_QUALITY_SCORE'
+        );
+      }
+      return num;
+    };
+
+    // Apply updates
+    if (overallScore !== undefined) {
+      evidence.quality.overallScore = validateScore(overallScore)!;
+    }
+    if (clarityScore !== undefined) {
+      evidence.quality.clarityScore = validateScore(clarityScore)!;
+    }
+    if (completenessScore !== undefined) {
+      evidence.quality.completenessScore = validateScore(completenessScore)!;
+    }
+    if (issues !== undefined) {
+      if (!Array.isArray(issues)) {
+        throw createError('Issues must be an array', 400, 'INVALID_ISSUES');
+      }
+      evidence.quality.issues = issues.filter((i: any) => typeof i === 'string');
+    }
+    if (recommendations !== undefined) {
+      if (!Array.isArray(recommendations)) {
+        throw createError('Recommendations must be an array', 400, 'INVALID_RECOMMENDATIONS');
+      }
+      evidence.quality.recommendations = recommendations.filter((r: any) => typeof r === 'string');
+    }
+
+    // Update lastAssessed
+    evidence.quality.lastAssessed = new Date();
+
+    await evidence.save();
+
+    // Clear caches
+    await redisManager.deletePattern(`evidence:${id}:*`);
+
+    // Track activity
+    await redisManager.trackUserActivity(userId, {
+      action: 'update_quality',
+      evidenceId: evidence._id,
+      projectId: evidence.project,
+    });
+
+    res.json({
+      success: true,
+      message: 'Quality assessment updated successfully',
+      data: evidence.quality,
+    });
+  })
+);
+
 export default router;
