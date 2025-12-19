@@ -695,4 +695,83 @@ router.post('/:id/verify',
   })
 );
 
+/**
+ * POST /api/evidence/:id/dispute - Mark evidence as disputed
+ *
+ * Body:
+ * - reasons: Array of dispute reasons (required)
+ */
+router.post('/:id/dispute',
+  authenticate,
+  validate(validationSchemas.objectId, 'params'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { reasons } = req.body;
+
+    // Validate reasons
+    if (!reasons || !Array.isArray(reasons) || reasons.length === 0) {
+      throw createError(
+        'Dispute reasons are required',
+        400,
+        'REASONS_REQUIRED'
+      );
+    }
+
+    // Find evidence
+    const evidence = await Evidence.findOne({ _id: id, isActive: true })
+      .populate('project', 'owner collaborators');
+
+    if (!evidence) {
+      throw createError(
+        EVIDENCE_ERROR_MESSAGES.NOT_FOUND,
+        404,
+        'EVIDENCE_NOT_FOUND'
+      );
+    }
+
+    // Check project access (any project member can dispute)
+    const userId = req.user!._id.toString();
+    const hasAccess = await checkProjectAccess(
+      evidence.project._id.toString(),
+      userId
+    );
+
+    if (!hasAccess) {
+      throw createError(
+        EVIDENCE_ERROR_MESSAGES.ACCESS_DENIED,
+        403,
+        'PROJECT_ACCESS_DENIED'
+      );
+    }
+
+    // Use the model's dispute method
+    await evidence.dispute(reasons);
+
+    // Re-populate for response
+    await evidence.populate([
+      { path: 'addedBy', select: 'firstName lastName email' },
+      { path: 'project', select: 'name' },
+    ]);
+
+    // Clear caches
+    await redisManager.deletePattern('evidence:*');
+
+    // Track activity
+    await redisManager.trackUserActivity(userId, {
+      action: 'dispute_evidence',
+      evidenceId: evidence._id,
+      projectId: evidence.project,
+      reasonCount: reasons.length,
+    });
+
+    logger.info(`Evidence disputed: ${evidence._id} by ${req.user!.email}`);
+
+    res.json({
+      success: true,
+      message: 'Evidence marked as disputed',
+      data: evidence,
+    });
+  })
+);
+
 export default router;
