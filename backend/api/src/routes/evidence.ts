@@ -168,6 +168,29 @@ router.get('/',
       query.$text = { $search: search as string };
     }
 
+    // Build cache key
+    const cacheKey = `evidence:list:${JSON.stringify({
+      query,
+      page,
+      limit,
+      sort,
+      order,
+      userId: req.user!._id.toString(),
+    })}`;
+
+    // Check cache first
+    const cachedResult = await redisManager.get(cacheKey);
+    if (cachedResult) {
+      logger.debug('Evidence list served from cache', { cacheKey });
+      res.json({
+        success: true,
+        data: cachedResult.evidence,
+        pagination: cachedResult.pagination,
+        cached: true,
+      });
+      return;
+    }
+
     // Execute query with pagination
     const skip = (Number(page) - 1) * Number(limit);
     const sortObj: any = {};
@@ -192,6 +215,20 @@ router.get('/',
       hasNext: Number(page) < Math.ceil(total / Number(limit)),
       hasPrev: Number(page) > 1,
     };
+
+    // Cache result
+    await redisManager.set(
+      cacheKey,
+      { evidence, pagination },
+      VALIDATION_LIMITS.EVIDENCE_CACHE_TTL
+    );
+
+    logger.info('Evidence list fetched', {
+      count: evidence.length,
+      total,
+      projectId,
+      userId: req.user!._id.toString(),
+    });
 
     res.json({
       success: true,
