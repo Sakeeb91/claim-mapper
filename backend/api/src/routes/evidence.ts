@@ -1203,4 +1203,149 @@ router.post('/:id/relationships',
   })
 );
 
+/**
+ * POST /api/evidence/:id/claims - Link claims to evidence
+ *
+ * Body:
+ * - claimIds: Array of claim IDs to link (required)
+ * - action: 'add' or 'remove' (default 'add')
+ */
+router.post('/:id/claims',
+  authenticate,
+  validate(validationSchemas.objectId, 'params'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { claimIds, action = 'add' } = req.body;
+
+    // Validate claimIds
+    if (!claimIds || !Array.isArray(claimIds) || claimIds.length === 0) {
+      throw createError(
+        'Claim IDs array is required',
+        400,
+        'CLAIM_IDS_REQUIRED'
+      );
+    }
+
+    // Validate action
+    if (!['add', 'remove'].includes(action)) {
+      throw createError(
+        'Action must be "add" or "remove"',
+        400,
+        'INVALID_ACTION'
+      );
+    }
+
+    // Find evidence
+    const evidence = await Evidence.findOne({ _id: id, isActive: true })
+      .populate('project', 'owner collaborators');
+
+    if (!evidence) {
+      throw createError(
+        EVIDENCE_ERROR_MESSAGES.NOT_FOUND,
+        404,
+        'EVIDENCE_NOT_FOUND'
+      );
+    }
+
+    // Check edit permissions
+    const userId = req.user!._id.toString();
+    const canEdit = await checkEditPermission(
+      evidence.project._id.toString(),
+      userId,
+      evidence.addedBy.toString()
+    );
+
+    if (!canEdit) {
+      throw createError(
+        'No permission to modify this evidence',
+        403,
+        'EDIT_PERMISSION_DENIED'
+      );
+    }
+
+    // Validate claims exist and belong to same project
+    const claims = await Claim.find({
+      _id: { $in: claimIds },
+      project: evidence.project._id,
+      isActive: true,
+    });
+
+    if (claims.length !== claimIds.length) {
+      throw createError(
+        'One or more claims not found or not in this project',
+        404,
+        'CLAIMS_NOT_FOUND'
+      );
+    }
+
+    let linkedCount = 0;
+    let unlinkedCount = 0;
+
+    if (action === 'add') {
+      // Add new claim links
+      const newClaimIds = claimIds.filter(
+        (cid: string) => !evidence.claims.some((ec: any) => ec.toString() === cid)
+      );
+
+      if (newClaimIds.length > 0) {
+        evidence.claims.push(...newClaimIds);
+        await evidence.save();
+
+        // Update claims to include this evidence
+        await Claim.updateMany(
+          { _id: { $in: newClaimIds } },
+          { $addToSet: { evidence: evidence._id } }
+        );
+
+        linkedCount = newClaimIds.length;
+      }
+    } else {
+      // Remove claim links
+      const claimsToRemove = claimIds.filter(
+        (cid: string) => evidence.claims.some((ec: any) => ec.toString() === cid)
+      );
+
+      if (claimsToRemove.length > 0) {
+        evidence.claims = evidence.claims.filter(
+          (ec: any) => !claimsToRemove.includes(ec.toString())
+        );
+        await evidence.save();
+
+        // Update claims to remove this evidence
+        await Claim.updateMany(
+          { _id: { $in: claimsToRemove } },
+          { $pull: { evidence: evidence._id } }
+        );
+
+        unlinkedCount = claimsToRemove.length;
+      }
+    }
+
+    // Clear caches
+    await redisManager.deletePattern('evidence:*');
+    await redisManager.deletePattern('claims:*');
+    await redisManager.deletePattern('graph:*');
+
+    // Track activity
+    await redisManager.trackUserActivity(userId, {
+      action: action === 'add' ? 'link_claims' : 'unlink_claims',
+      evidenceId: evidence._id,
+      claimCount: action === 'add' ? linkedCount : unlinkedCount,
+    });
+
+    res.json({
+      success: true,
+      message: action === 'add'
+        ? `${linkedCount} claim(s) linked successfully`
+        : `${unlinkedCount} claim(s) unlinked successfully`,
+      data: {
+        action,
+        linkedCount,
+        unlinkedCount,
+        totalClaims: evidence.claims.length,
+      },
+    });
+  })
+);
+
 export default router;
