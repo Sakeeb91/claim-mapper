@@ -238,4 +238,74 @@ router.get('/',
   })
 );
 
+/**
+ * GET /api/evidence/:id - Get single evidence by ID
+ */
+router.get('/:id',
+  authenticate,
+  validate(validationSchemas.objectId, 'params'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+
+    // Check cache first
+    const cacheKey = `evidence:${id}:${req.user!._id.toString()}`;
+    const cachedResult = await redisManager.get(cacheKey);
+    if (cachedResult) {
+      res.json({
+        success: true,
+        data: cachedResult,
+        cached: true,
+      });
+      return;
+    }
+
+    // Fetch evidence with relationships
+    const evidence = await Evidence.findOne({ _id: id, isActive: true })
+      .populate('addedBy', 'firstName lastName email')
+      .populate('project', 'name visibility owner collaborators')
+      .populate('claims', 'text type confidence status')
+      .populate('annotations.user', 'firstName lastName email')
+      .populate('relationships.evidenceId', 'text type reliability.score')
+      .populate('verification.verifiedBy', 'firstName lastName email');
+
+    if (!evidence) {
+      throw createError(
+        EVIDENCE_ERROR_MESSAGES.NOT_FOUND,
+        404,
+        'EVIDENCE_NOT_FOUND'
+      );
+    }
+
+    // Check project access
+    const project = evidence.project as any;
+    const userId = req.user!._id.toString();
+    const hasAccess = project.visibility === 'public' ||
+      project.owner.toString() === userId ||
+      project.collaborators.some((c: any) => c.user.toString() === userId);
+
+    if (!hasAccess) {
+      throw createError(
+        EVIDENCE_ERROR_MESSAGES.ACCESS_DENIED,
+        403,
+        'EVIDENCE_ACCESS_DENIED'
+      );
+    }
+
+    // Cache result
+    await redisManager.set(cacheKey, evidence, VALIDATION_LIMITS.EVIDENCE_CACHE_TTL);
+
+    // Track view activity
+    await redisManager.trackUserActivity(userId, {
+      action: 'view_evidence',
+      evidenceId: evidence._id,
+      projectId: evidence.project,
+    });
+
+    res.json({
+      success: true,
+      data: evidence,
+    });
+  })
+);
+
 export default router;
