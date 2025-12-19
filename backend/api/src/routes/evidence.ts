@@ -1,5 +1,6 @@
 import express from 'express';
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import Evidence from '../models/Evidence';
 import Claim from '../models/Claim';
 import Project from '../models/Project';
@@ -74,6 +75,101 @@ async function checkEditPermission(
 // ============================================================================
 // SPECIFIC ROUTES (must come before parameterized routes)
 // ============================================================================
+
+/**
+ * GET /api/evidence/project/:projectId/stats - Get evidence statistics for a project
+ */
+router.get('/project/:projectId/stats',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { projectId } = req.params;
+
+    // Validate projectId
+    if (!/^[0-9a-fA-F]{24}$/.test(projectId)) {
+      throw createError('Invalid project ID format', 400, 'INVALID_PROJECT_ID');
+    }
+
+    // Check project access
+    const hasAccess = await checkProjectAccess(projectId, req.user!._id.toString());
+    if (!hasAccess) {
+      throw createError(
+        EVIDENCE_ERROR_MESSAGES.ACCESS_DENIED,
+        403,
+        'PROJECT_ACCESS_DENIED'
+      );
+    }
+
+    // Check cache
+    const cacheKey = `evidence:stats:${projectId}`;
+    const cachedResult = await redisManager.get(cacheKey);
+    if (cachedResult) {
+      res.json({
+        success: true,
+        data: cachedResult,
+        cached: true,
+      });
+      return;
+    }
+
+    // Aggregate statistics
+    const projectObjectId = new mongoose.Types.ObjectId(projectId);
+    const stats = await Evidence.aggregate([
+      { $match: { project: projectObjectId, isActive: true } },
+      {
+        $group: {
+          _id: null,
+          totalEvidence: { $sum: 1 },
+          avgReliability: { $avg: '$reliability.score' },
+          avgRelevance: { $avg: '$relevance.score' },
+          avgQuality: { $avg: '$quality.overallScore' },
+          verified: { $sum: { $cond: [{ $eq: ['$verification.status', 'verified'] }, 1, 0] } },
+          disputed: { $sum: { $cond: [{ $eq: ['$verification.status', 'disputed'] }, 1, 0] } },
+          unverified: { $sum: { $cond: [{ $eq: ['$verification.status', 'unverified'] }, 1, 0] } },
+          byType: { $push: '$type' },
+          bySourceType: { $push: '$source.type' },
+        },
+      },
+    ]);
+
+    const typeStats = await Evidence.aggregate([
+      { $match: { project: projectObjectId, isActive: true } },
+      { $group: { _id: '$type', count: { $sum: 1 } } },
+    ]);
+
+    const sourceTypeStats = await Evidence.aggregate([
+      { $match: { project: projectObjectId, isActive: true } },
+      { $group: { _id: '$source.type', count: { $sum: 1 } } },
+    ]);
+
+    const result = {
+      totalEvidence: stats[0]?.totalEvidence || 0,
+      averageReliability: stats[0]?.avgReliability || 0,
+      averageRelevance: stats[0]?.avgRelevance || 0,
+      averageQuality: stats[0]?.avgQuality || 0,
+      verificationStatus: {
+        verified: stats[0]?.verified || 0,
+        disputed: stats[0]?.disputed || 0,
+        unverified: stats[0]?.unverified || 0,
+      },
+      byType: typeStats.reduce((acc, { _id, count }) => {
+        if (_id) acc[_id] = count;
+        return acc;
+      }, {} as Record<string, number>),
+      bySourceType: sourceTypeStats.reduce((acc, { _id, count }) => {
+        if (_id) acc[_id] = count;
+        return acc;
+      }, {} as Record<string, number>),
+    };
+
+    // Cache for 2 minutes
+    await redisManager.set(cacheKey, result, 120);
+
+    res.json({
+      success: true,
+      data: result,
+    });
+  })
+);
 
 /**
  * GET /api/evidence/search - Search evidence by text
