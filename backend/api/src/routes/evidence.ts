@@ -71,6 +71,134 @@ async function checkEditPermission(
   return collaborator?.permissions?.canEdit === true;
 }
 
-// Routes will be added in subsequent commits
+/**
+ * GET /api/evidence - List evidence with filtering
+ *
+ * Query params:
+ * - projectId: Filter by project
+ * - claimId: Filter by associated claim
+ * - type: Filter by evidence type
+ * - status: Filter by verification status
+ * - minReliability: Minimum reliability score
+ * - search: Text search query
+ * - page: Page number (default 1)
+ * - limit: Items per page (default 20, max 100)
+ * - sort: Sort field (default 'updatedAt')
+ * - order: Sort order 'asc' or 'desc' (default 'desc')
+ */
+router.get('/',
+  authenticate,
+  validatePagination,
+  asyncHandler(async (req: Request, res: Response) => {
+    const {
+      page = 1,
+      limit = 20,
+      sort = 'updatedAt',
+      order = 'desc',
+      projectId,
+      claimId,
+      type,
+      status,
+      minReliability,
+      search,
+      tags,
+    } = req.query;
+
+    // Build query
+    const query: any = { isActive: true };
+
+    // Project filter with access check
+    if (projectId) {
+      const hasAccess = await checkProjectAccess(
+        projectId as string,
+        req.user!._id.toString()
+      );
+
+      if (!hasAccess) {
+        throw createError(
+          EVIDENCE_ERROR_MESSAGES.ACCESS_DENIED,
+          403,
+          'PROJECT_ACCESS_DENIED'
+        );
+      }
+
+      query.project = projectId;
+    } else {
+      // If no project specified, show evidence from user's accessible projects
+      const userProjects = await Project.find({
+        $or: [
+          { owner: req.user!._id },
+          { 'collaborators.user': req.user!._id },
+          { visibility: 'public' },
+        ],
+        isActive: true,
+      }).select('_id');
+
+      query.project = { $in: userProjects.map((p) => p._id) };
+    }
+
+    // Claim filter
+    if (claimId) {
+      query.claims = claimId;
+    }
+
+    // Type filter
+    if (type) {
+      query.type = type;
+    }
+
+    // Verification status filter
+    if (status) {
+      query['verification.status'] = status;
+    }
+
+    // Minimum reliability filter
+    if (minReliability) {
+      query['reliability.score'] = { $gte: parseFloat(minReliability as string) };
+    }
+
+    // Tags filter
+    if (tags) {
+      const tagArray = Array.isArray(tags) ? tags : [tags];
+      query.tags = { $in: tagArray };
+    }
+
+    // Text search
+    if (search) {
+      query.$text = { $search: search as string };
+    }
+
+    // Execute query with pagination
+    const skip = (Number(page) - 1) * Number(limit);
+    const sortObj: any = {};
+    sortObj[sort as string] = order === 'asc' ? 1 : -1;
+
+    const [evidence, total] = await Promise.all([
+      Evidence.find(query)
+        .populate('addedBy', 'firstName lastName email')
+        .populate('project', 'name visibility')
+        .populate('claims', 'text type confidence')
+        .sort(sortObj)
+        .skip(skip)
+        .limit(Math.min(Number(limit), VALIDATION_LIMITS.MAX_PAGE_SIZE)),
+      Evidence.countDocuments(query),
+    ]);
+
+    const pagination = {
+      page: Number(page),
+      limit: Number(limit),
+      total,
+      totalPages: Math.ceil(total / Number(limit)),
+      hasNext: Number(page) < Math.ceil(total / Number(limit)),
+      hasPrev: Number(page) > 1,
+    };
+
+    res.json({
+      success: true,
+      data: evidence,
+      pagination,
+    });
+  })
+);
 
 export default router;
