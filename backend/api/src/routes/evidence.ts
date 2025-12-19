@@ -774,4 +774,75 @@ router.post('/:id/dispute',
   })
 );
 
+/**
+ * GET /api/evidence/claim/:claimId - Get all evidence for a specific claim
+ */
+router.get('/claim/:claimId',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { claimId } = req.params;
+
+    // Validate claimId format
+    if (!/^[0-9a-fA-F]{24}$/.test(claimId)) {
+      throw createError('Invalid claim ID format', 400, 'INVALID_CLAIM_ID');
+    }
+
+    // Check cache first
+    const cacheKey = `evidence:claim:${claimId}:${req.user!._id.toString()}`;
+    const cachedResult = await redisManager.get(cacheKey);
+    if (cachedResult) {
+      res.json({
+        success: true,
+        data: cachedResult,
+        cached: true,
+      });
+      return;
+    }
+
+    // Find the claim and verify access
+    const claim = await Claim.findOne({ _id: claimId, isActive: true })
+      .populate('project', 'owner collaborators visibility');
+
+    if (!claim) {
+      throw createError('Claim not found', 404, 'CLAIM_NOT_FOUND');
+    }
+
+    // Check project access
+    const project = claim.project as any;
+    const userId = req.user!._id.toString();
+    const hasAccess = project.visibility === 'public' ||
+      project.owner.toString() === userId ||
+      project.collaborators.some((c: any) => c.user.toString() === userId);
+
+    if (!hasAccess) {
+      throw createError(
+        EVIDENCE_ERROR_MESSAGES.ACCESS_DENIED,
+        403,
+        'CLAIM_ACCESS_DENIED'
+      );
+    }
+
+    // Find all evidence linked to this claim
+    const evidence = await Evidence.find({
+      claims: claimId,
+      isActive: true,
+    })
+      .populate('addedBy', 'firstName lastName email')
+      .populate('verification.verifiedBy', 'firstName lastName email')
+      .sort({ 'reliability.score': -1, createdAt: -1 });
+
+    // Cache result
+    await redisManager.set(cacheKey, evidence, VALIDATION_LIMITS.EVIDENCE_CACHE_TTL);
+
+    res.json({
+      success: true,
+      data: evidence,
+      meta: {
+        claimId,
+        count: evidence.length,
+      },
+    });
+  })
+);
+
 export default router;
