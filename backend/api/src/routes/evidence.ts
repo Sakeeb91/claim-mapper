@@ -442,4 +442,101 @@ router.post('/',
   })
 );
 
+/**
+ * PUT /api/evidence/:id - Update evidence
+ */
+router.put('/:id',
+  authenticate,
+  sanitize,
+  validate(validationSchemas.objectId, 'params'),
+  validate(validationSchemas.updateEvidence),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const updates = req.body;
+
+    // Find evidence
+    const evidence = await Evidence.findOne({ _id: id, isActive: true })
+      .populate('project', 'owner collaborators');
+
+    if (!evidence) {
+      throw createError(
+        EVIDENCE_ERROR_MESSAGES.NOT_FOUND,
+        404,
+        'EVIDENCE_NOT_FOUND'
+      );
+    }
+
+    // Check if evidence is retracted
+    if (evidence.verification.status === 'retracted') {
+      throw createError(
+        EVIDENCE_ERROR_MESSAGES.CANNOT_MODIFY_RETRACTED,
+        403,
+        'CANNOT_MODIFY_RETRACTED'
+      );
+    }
+
+    // Check edit permissions
+    const userId = req.user!._id.toString();
+    const canEdit = await checkEditPermission(
+      evidence.project._id.toString(),
+      userId,
+      evidence.addedBy.toString()
+    );
+
+    if (!canEdit) {
+      throw createError(
+        'No permission to edit this evidence',
+        403,
+        'EDIT_PERMISSION_DENIED'
+      );
+    }
+
+    // Apply updates
+    const allowedUpdates = [
+      'text',
+      'type',
+      'source',
+      'reliability',
+      'relevance',
+      'keywords',
+      'tags',
+    ];
+
+    for (const key of allowedUpdates) {
+      if (updates[key] !== undefined) {
+        (evidence as any)[key] = updates[key];
+      }
+    }
+
+    await evidence.save();
+
+    // Re-populate for response
+    await evidence.populate([
+      { path: 'addedBy', select: 'firstName lastName email' },
+      { path: 'project', select: 'name' },
+      { path: 'claims', select: 'text type confidence' },
+    ]);
+
+    // Clear caches
+    await redisManager.deletePattern('evidence:*');
+    await redisManager.deletePattern('graph:*');
+
+    // Track activity
+    await redisManager.trackUserActivity(userId, {
+      action: 'update_evidence',
+      evidenceId: evidence._id,
+      projectId: evidence.project,
+      updatedFields: Object.keys(updates),
+    });
+
+    logger.info(`Evidence updated: ${evidence._id} by ${req.user!.email}`);
+
+    res.json({
+      success: true,
+      message: 'Evidence updated successfully',
+      data: evidence,
+    });
+  })
+);
+
 export default router;
