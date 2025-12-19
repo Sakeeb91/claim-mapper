@@ -1626,4 +1626,92 @@ router.put('/:id/usage',
   })
 );
 
+/**
+ * POST /api/evidence/:id/retract - Retract evidence (marks as no longer valid)
+ *
+ * Body:
+ * - reason: Reason for retraction (required)
+ */
+router.post('/:id/retract',
+  authenticate,
+  validate(validationSchemas.objectId, 'params'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { reason } = req.body;
+
+    // Validate reason
+    if (!reason || typeof reason !== 'string' || reason.trim().length < 10) {
+      throw createError(
+        'Retraction reason is required (minimum 10 characters)',
+        400,
+        'REASON_REQUIRED'
+      );
+    }
+
+    // Find evidence
+    const evidence = await Evidence.findOne({ _id: id, isActive: true })
+      .populate('project', 'owner collaborators');
+
+    if (!evidence) {
+      throw createError(
+        EVIDENCE_ERROR_MESSAGES.NOT_FOUND,
+        404,
+        'EVIDENCE_NOT_FOUND'
+      );
+    }
+
+    // Only project owner can retract
+    const userId = req.user!._id.toString();
+    const project = evidence.project as any;
+
+    if (project.owner.toString() !== userId) {
+      throw createError(
+        'Only project owners can retract evidence',
+        403,
+        'RETRACT_PERMISSION_DENIED'
+      );
+    }
+
+    // Check if already retracted
+    if (evidence.verification.status === 'retracted') {
+      throw createError(
+        'Evidence is already retracted',
+        400,
+        'ALREADY_RETRACTED'
+      );
+    }
+
+    // Retract the evidence
+    evidence.verification.status = 'retracted';
+    evidence.verification.notes = reason.trim();
+    evidence.verification.verifiedAt = new Date();
+    evidence.verification.verifiedBy = req.user!._id;
+
+    await evidence.save();
+
+    // Clear caches
+    await redisManager.deletePattern('evidence:*');
+    await redisManager.deletePattern('graph:*');
+
+    // Track activity
+    await redisManager.trackUserActivity(userId, {
+      action: 'retract_evidence',
+      evidenceId: evidence._id,
+      projectId: evidence.project,
+    });
+
+    logger.info(`Evidence retracted: ${evidence._id} by ${req.user!.email}`);
+
+    res.json({
+      success: true,
+      message: 'Evidence retracted successfully',
+      data: {
+        id: evidence._id,
+        status: evidence.verification.status,
+        reason: evidence.verification.notes,
+      },
+    });
+  })
+);
+
 export default router;
