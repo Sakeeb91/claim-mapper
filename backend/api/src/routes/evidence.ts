@@ -845,4 +845,83 @@ router.get('/claim/:claimId',
   })
 );
 
+/**
+ * GET /api/evidence/search - Search evidence by text
+ *
+ * Query params:
+ * - q: Search query (required)
+ * - projectId: Optional project filter
+ * - limit: Max results (default 20)
+ */
+router.get('/search',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { q, projectId, limit = 20 } = req.query;
+
+    if (!q || typeof q !== 'string' || q.trim().length < 2) {
+      throw createError(
+        'Search query must be at least 2 characters',
+        400,
+        'INVALID_SEARCH_QUERY'
+      );
+    }
+
+    // Build search conditions
+    const searchConditions: any = {
+      $text: { $search: q.trim() },
+      isActive: true,
+    };
+
+    // Add project filter if provided
+    if (projectId) {
+      const hasAccess = await checkProjectAccess(
+        projectId as string,
+        req.user!._id.toString()
+      );
+
+      if (!hasAccess) {
+        throw createError(
+          EVIDENCE_ERROR_MESSAGES.ACCESS_DENIED,
+          403,
+          'PROJECT_ACCESS_DENIED'
+        );
+      }
+
+      searchConditions.project = projectId;
+    } else {
+      // Limit to user's accessible projects
+      const userProjects = await Project.find({
+        $or: [
+          { owner: req.user!._id },
+          { 'collaborators.user': req.user!._id },
+          { visibility: 'public' },
+        ],
+        isActive: true,
+      }).select('_id');
+
+      searchConditions.project = { $in: userProjects.map((p) => p._id) };
+    }
+
+    // Execute search
+    const evidence = await Evidence.find(
+      searchConditions,
+      { score: { $meta: 'textScore' } }
+    )
+      .sort({ score: { $meta: 'textScore' } })
+      .limit(Math.min(Number(limit), VALIDATION_LIMITS.SEARCH_MAX_RESULTS))
+      .populate('addedBy', 'firstName lastName email')
+      .populate('project', 'name');
+
+    res.json({
+      success: true,
+      data: evidence,
+      meta: {
+        query: q,
+        count: evidence.length,
+        limit: Number(limit),
+      },
+    });
+  })
+);
+
 export default router;
