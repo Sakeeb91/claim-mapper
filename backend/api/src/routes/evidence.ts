@@ -77,6 +77,143 @@ async function checkEditPermission(
 // ============================================================================
 
 /**
+ * POST /api/evidence/batch - Batch operations on multiple evidence items
+ *
+ * Body:
+ * - operation: 'delete' | 'verify' | 'tag'
+ * - evidenceIds: Array of evidence IDs
+ * - data: Additional data for the operation (e.g., tags for 'tag' operation)
+ */
+router.post('/batch',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { operation, evidenceIds, data } = req.body;
+
+    // Validate operation
+    const validOperations = ['delete', 'verify', 'tag'];
+    if (!operation || !validOperations.includes(operation)) {
+      throw createError(
+        `Invalid operation. Must be one of: ${validOperations.join(', ')}`,
+        400,
+        'INVALID_OPERATION'
+      );
+    }
+
+    // Validate evidenceIds
+    if (!evidenceIds || !Array.isArray(evidenceIds) || evidenceIds.length === 0) {
+      throw createError('Evidence IDs array is required', 400, 'EVIDENCE_IDS_REQUIRED');
+    }
+
+    if (evidenceIds.length > 50) {
+      throw createError('Maximum 50 evidence items per batch', 400, 'BATCH_SIZE_EXCEEDED');
+    }
+
+    // Find all evidence items
+    const evidenceItems = await Evidence.find({
+      _id: { $in: evidenceIds },
+      isActive: true,
+    }).populate('project', 'owner collaborators');
+
+    if (evidenceItems.length === 0) {
+      throw createError('No evidence items found', 404, 'NO_EVIDENCE_FOUND');
+    }
+
+    // Check permissions for each item
+    const userId = req.user!._id.toString();
+    const results: { id: string; success: boolean; error?: string }[] = [];
+
+    for (const evidence of evidenceItems) {
+      const project = evidence.project as any;
+      const isOwner = project.owner.toString() === userId;
+      const isCreator = evidence.addedBy.toString() === userId;
+      const hasEditPermission = project.collaborators.some((c: any) =>
+        c.user.toString() === userId && c.permissions?.canEdit
+      );
+
+      if (operation === 'delete') {
+        const canDelete = isOwner || isCreator ||
+          project.collaborators.some((c: any) =>
+            c.user.toString() === userId && c.permissions?.canDelete
+          );
+
+        if (!canDelete) {
+          results.push({ id: evidence._id.toString(), success: false, error: 'Permission denied' });
+          continue;
+        }
+
+        evidence.isActive = false;
+        await evidence.save();
+        results.push({ id: evidence._id.toString(), success: true });
+      } else if (operation === 'verify') {
+        const canVerify = isOwner ||
+          project.collaborators.some((c: any) =>
+            c.user.toString() === userId && c.role === 'admin'
+          );
+
+        if (!canVerify) {
+          results.push({ id: evidence._id.toString(), success: false, error: 'Permission denied' });
+          continue;
+        }
+
+        if (evidence.verification.status === 'verified') {
+          results.push({ id: evidence._id.toString(), success: false, error: 'Already verified' });
+          continue;
+        }
+
+        await evidence.verify(userId);
+        results.push({ id: evidence._id.toString(), success: true });
+      } else if (operation === 'tag') {
+        if (!data?.tags || !Array.isArray(data.tags)) {
+          results.push({ id: evidence._id.toString(), success: false, error: 'Tags required' });
+          continue;
+        }
+
+        if (!isOwner && !isCreator && !hasEditPermission) {
+          results.push({ id: evidence._id.toString(), success: false, error: 'Permission denied' });
+          continue;
+        }
+
+        // Add new tags (avoid duplicates)
+        const newTags = data.tags.filter((t: string) => !evidence.tags.includes(t));
+        evidence.tags.push(...newTags);
+        await evidence.save();
+        results.push({ id: evidence._id.toString(), success: true });
+      }
+    }
+
+    // Clear caches
+    await redisManager.deletePattern('evidence:*');
+    if (operation === 'delete') {
+      await redisManager.deletePattern('claims:*');
+      await redisManager.deletePattern('graph:*');
+    }
+
+    // Track activity
+    await redisManager.trackUserActivity(userId, {
+      action: `batch_${operation}`,
+      count: results.filter((r) => r.success).length,
+    });
+
+    const successCount = results.filter((r) => r.success).length;
+    const failCount = results.filter((r) => !r.success).length;
+
+    res.json({
+      success: true,
+      message: `Batch ${operation}: ${successCount} succeeded, ${failCount} failed`,
+      data: {
+        results,
+        summary: {
+          total: evidenceIds.length,
+          found: evidenceItems.length,
+          succeeded: successCount,
+          failed: failCount,
+        },
+      },
+    });
+  })
+);
+
+/**
  * GET /api/evidence/project/:projectId/stats - Get evidence statistics for a project
  */
 router.get('/project/:projectId/stats',
