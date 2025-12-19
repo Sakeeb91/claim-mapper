@@ -1453,4 +1453,81 @@ router.put('/:id/quality',
   })
 );
 
+/**
+ * PUT /api/evidence/:id/usage - Track evidence usage/citation
+ *
+ * Body:
+ * - citedIn: Array of document/claim IDs where evidence was cited
+ * - usedInChain: ID of reasoning chain where evidence was used
+ */
+router.put('/:id/usage',
+  authenticate,
+  validate(validationSchemas.objectId, 'params'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { citedIn, usedInChain } = req.body;
+
+    // Find evidence
+    const evidence = await Evidence.findOne({ _id: id, isActive: true })
+      .populate('project', 'owner collaborators');
+
+    if (!evidence) {
+      throw createError(
+        EVIDENCE_ERROR_MESSAGES.NOT_FOUND,
+        404,
+        'EVIDENCE_NOT_FOUND'
+      );
+    }
+
+    // Check project access
+    const userId = req.user!._id.toString();
+    const hasAccess = await checkProjectAccess(
+      evidence.project._id.toString(),
+      userId
+    );
+
+    if (!hasAccess) {
+      throw createError(
+        EVIDENCE_ERROR_MESSAGES.ACCESS_DENIED,
+        403,
+        'PROJECT_ACCESS_DENIED'
+      );
+    }
+
+    // Track citations
+    if (citedIn && Array.isArray(citedIn)) {
+      for (const citation of citedIn) {
+        if (!evidence.usage.citedIn.includes(citation)) {
+          evidence.usage.citedIn.push(citation);
+        }
+      }
+    }
+
+    // Track usage in reasoning chains
+    if (usedInChain && !evidence.usage.usedInChains.includes(usedInChain)) {
+      evidence.usage.usedInChains.push(usedInChain);
+    }
+
+    // Update last used timestamp
+    evidence.usage.lastUsed = new Date();
+
+    await evidence.save();
+
+    // Clear caches
+    await redisManager.deletePattern(`evidence:${id}:*`);
+
+    // Track activity
+    await redisManager.trackUserActivity(userId, {
+      action: 'track_usage',
+      evidenceId: evidence._id,
+    });
+
+    res.json({
+      success: true,
+      message: 'Usage tracking updated',
+      data: evidence.usage,
+    });
+  })
+);
+
 export default router;
