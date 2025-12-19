@@ -936,4 +936,108 @@ router.post('/:id/dispute',
   })
 );
 
+/**
+ * POST /api/evidence/:id/annotations - Add annotation to evidence
+ *
+ * Body:
+ * - text: Annotation text (required)
+ * - type: Annotation type (comment, highlight, question, suggestion)
+ * - position: Optional position in evidence text
+ */
+router.post('/:id/annotations',
+  authenticate,
+  validate(validationSchemas.objectId, 'params'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { text, type = 'comment', position } = req.body;
+
+    // Validate annotation text
+    if (!text || typeof text !== 'string' || text.trim().length < 1) {
+      throw createError(
+        'Annotation text is required',
+        400,
+        'ANNOTATION_TEXT_REQUIRED'
+      );
+    }
+
+    // Validate annotation type
+    const validTypes = ['comment', 'highlight', 'question', 'suggestion'];
+    if (!validTypes.includes(type)) {
+      throw createError(
+        `Invalid annotation type. Must be one of: ${validTypes.join(', ')}`,
+        400,
+        'INVALID_ANNOTATION_TYPE'
+      );
+    }
+
+    // Find evidence
+    const evidence = await Evidence.findOne({ _id: id, isActive: true })
+      .populate('project', 'owner collaborators visibility');
+
+    if (!evidence) {
+      throw createError(
+        EVIDENCE_ERROR_MESSAGES.NOT_FOUND,
+        404,
+        'EVIDENCE_NOT_FOUND'
+      );
+    }
+
+    // Check project access
+    const userId = req.user!._id.toString();
+    const hasAccess = await checkProjectAccess(
+      evidence.project._id.toString(),
+      userId
+    );
+
+    if (!hasAccess) {
+      throw createError(
+        EVIDENCE_ERROR_MESSAGES.ACCESS_DENIED,
+        403,
+        'PROJECT_ACCESS_DENIED'
+      );
+    }
+
+    // Check annotation limit
+    if (evidence.annotations.length >= VALIDATION_LIMITS.EVIDENCE_MAX_ANNOTATIONS) {
+      throw createError(
+        EVIDENCE_ERROR_MESSAGES.MAX_ANNOTATIONS_REACHED,
+        400,
+        'MAX_ANNOTATIONS_REACHED'
+      );
+    }
+
+    // Add annotation
+    evidence.annotations.push({
+      user: req.user!._id,
+      text: text.trim(),
+      type,
+      position,
+      createdAt: new Date(),
+    });
+
+    await evidence.save();
+
+    // Re-populate for response
+    await evidence.populate([
+      { path: 'annotations.user', select: 'firstName lastName email' },
+    ]);
+
+    // Clear caches
+    await redisManager.deletePattern(`evidence:${id}:*`);
+
+    // Track activity
+    await redisManager.trackUserActivity(userId, {
+      action: 'add_annotation',
+      evidenceId: evidence._id,
+      annotationType: type,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Annotation added successfully',
+      data: evidence.annotations[evidence.annotations.length - 1],
+    });
+  })
+);
+
 export default router;
