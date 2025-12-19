@@ -71,6 +71,164 @@ async function checkEditPermission(
   return collaborator?.permissions?.canEdit === true;
 }
 
+// ============================================================================
+// SPECIFIC ROUTES (must come before parameterized routes)
+// ============================================================================
+
+/**
+ * GET /api/evidence/search - Search evidence by text
+ *
+ * Query params:
+ * - q: Search query (required)
+ * - projectId: Optional project filter
+ * - limit: Max results (default 20)
+ */
+router.get('/search',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { q, projectId, limit = 20 } = req.query;
+
+    if (!q || typeof q !== 'string' || q.trim().length < 2) {
+      throw createError(
+        'Search query must be at least 2 characters',
+        400,
+        'INVALID_SEARCH_QUERY'
+      );
+    }
+
+    // Build search conditions
+    const searchConditions: any = {
+      $text: { $search: q.trim() },
+      isActive: true,
+    };
+
+    // Add project filter if provided
+    if (projectId) {
+      const hasAccess = await checkProjectAccess(
+        projectId as string,
+        req.user!._id.toString()
+      );
+
+      if (!hasAccess) {
+        throw createError(
+          EVIDENCE_ERROR_MESSAGES.ACCESS_DENIED,
+          403,
+          'PROJECT_ACCESS_DENIED'
+        );
+      }
+
+      searchConditions.project = projectId;
+    } else {
+      // Limit to user's accessible projects
+      const userProjects = await Project.find({
+        $or: [
+          { owner: req.user!._id },
+          { 'collaborators.user': req.user!._id },
+          { visibility: 'public' },
+        ],
+        isActive: true,
+      }).select('_id');
+
+      searchConditions.project = { $in: userProjects.map((p) => p._id) };
+    }
+
+    // Execute search
+    const evidence = await Evidence.find(
+      searchConditions,
+      { score: { $meta: 'textScore' } }
+    )
+      .sort({ score: { $meta: 'textScore' } })
+      .limit(Math.min(Number(limit), VALIDATION_LIMITS.SEARCH_MAX_RESULTS))
+      .populate('addedBy', 'firstName lastName email')
+      .populate('project', 'name');
+
+    res.json({
+      success: true,
+      data: evidence,
+      meta: {
+        query: q,
+        count: evidence.length,
+        limit: Number(limit),
+      },
+    });
+  })
+);
+
+/**
+ * GET /api/evidence/claim/:claimId - Get all evidence for a specific claim
+ */
+router.get('/claim/:claimId',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { claimId } = req.params;
+
+    // Validate claimId format
+    if (!/^[0-9a-fA-F]{24}$/.test(claimId)) {
+      throw createError('Invalid claim ID format', 400, 'INVALID_CLAIM_ID');
+    }
+
+    // Check cache first
+    const cacheKey = `evidence:claim:${claimId}:${req.user!._id.toString()}`;
+    const cachedResult = await redisManager.get(cacheKey);
+    if (cachedResult) {
+      res.json({
+        success: true,
+        data: cachedResult,
+        cached: true,
+      });
+      return;
+    }
+
+    // Find the claim and verify access
+    const claim = await Claim.findOne({ _id: claimId, isActive: true })
+      .populate('project', 'owner collaborators visibility');
+
+    if (!claim) {
+      throw createError('Claim not found', 404, 'CLAIM_NOT_FOUND');
+    }
+
+    // Check project access
+    const project = claim.project as any;
+    const userId = req.user!._id.toString();
+    const hasAccess = project.visibility === 'public' ||
+      project.owner.toString() === userId ||
+      project.collaborators.some((c: any) => c.user.toString() === userId);
+
+    if (!hasAccess) {
+      throw createError(
+        EVIDENCE_ERROR_MESSAGES.ACCESS_DENIED,
+        403,
+        'CLAIM_ACCESS_DENIED'
+      );
+    }
+
+    // Find all evidence linked to this claim
+    const evidence = await Evidence.find({
+      claims: claimId,
+      isActive: true,
+    })
+      .populate('addedBy', 'firstName lastName email')
+      .populate('verification.verifiedBy', 'firstName lastName email')
+      .sort({ 'reliability.score': -1, createdAt: -1 });
+
+    // Cache result
+    await redisManager.set(cacheKey, evidence, VALIDATION_LIMITS.EVIDENCE_CACHE_TTL);
+
+    res.json({
+      success: true,
+      data: evidence,
+      meta: {
+        claimId,
+        count: evidence.length,
+      },
+    });
+  })
+);
+
+// ============================================================================
+// LIST AND CRUD ROUTES
+// ============================================================================
+
 /**
  * GET /api/evidence - List evidence with filtering
  *
@@ -615,6 +773,10 @@ router.delete('/:id',
   })
 );
 
+// ============================================================================
+// SPECIAL ACTION ROUTES
+// ============================================================================
+
 /**
  * POST /api/evidence/:id/verify - Mark evidence as verified
  *
@@ -770,156 +932,6 @@ router.post('/:id/dispute',
       success: true,
       message: 'Evidence marked as disputed',
       data: evidence,
-    });
-  })
-);
-
-/**
- * GET /api/evidence/claim/:claimId - Get all evidence for a specific claim
- */
-router.get('/claim/:claimId',
-  authenticate,
-  asyncHandler(async (req: Request, res: Response) => {
-    const { claimId } = req.params;
-
-    // Validate claimId format
-    if (!/^[0-9a-fA-F]{24}$/.test(claimId)) {
-      throw createError('Invalid claim ID format', 400, 'INVALID_CLAIM_ID');
-    }
-
-    // Check cache first
-    const cacheKey = `evidence:claim:${claimId}:${req.user!._id.toString()}`;
-    const cachedResult = await redisManager.get(cacheKey);
-    if (cachedResult) {
-      res.json({
-        success: true,
-        data: cachedResult,
-        cached: true,
-      });
-      return;
-    }
-
-    // Find the claim and verify access
-    const claim = await Claim.findOne({ _id: claimId, isActive: true })
-      .populate('project', 'owner collaborators visibility');
-
-    if (!claim) {
-      throw createError('Claim not found', 404, 'CLAIM_NOT_FOUND');
-    }
-
-    // Check project access
-    const project = claim.project as any;
-    const userId = req.user!._id.toString();
-    const hasAccess = project.visibility === 'public' ||
-      project.owner.toString() === userId ||
-      project.collaborators.some((c: any) => c.user.toString() === userId);
-
-    if (!hasAccess) {
-      throw createError(
-        EVIDENCE_ERROR_MESSAGES.ACCESS_DENIED,
-        403,
-        'CLAIM_ACCESS_DENIED'
-      );
-    }
-
-    // Find all evidence linked to this claim
-    const evidence = await Evidence.find({
-      claims: claimId,
-      isActive: true,
-    })
-      .populate('addedBy', 'firstName lastName email')
-      .populate('verification.verifiedBy', 'firstName lastName email')
-      .sort({ 'reliability.score': -1, createdAt: -1 });
-
-    // Cache result
-    await redisManager.set(cacheKey, evidence, VALIDATION_LIMITS.EVIDENCE_CACHE_TTL);
-
-    res.json({
-      success: true,
-      data: evidence,
-      meta: {
-        claimId,
-        count: evidence.length,
-      },
-    });
-  })
-);
-
-/**
- * GET /api/evidence/search - Search evidence by text
- *
- * Query params:
- * - q: Search query (required)
- * - projectId: Optional project filter
- * - limit: Max results (default 20)
- */
-router.get('/search',
-  authenticate,
-  asyncHandler(async (req: Request, res: Response) => {
-    const { q, projectId, limit = 20 } = req.query;
-
-    if (!q || typeof q !== 'string' || q.trim().length < 2) {
-      throw createError(
-        'Search query must be at least 2 characters',
-        400,
-        'INVALID_SEARCH_QUERY'
-      );
-    }
-
-    // Build search conditions
-    const searchConditions: any = {
-      $text: { $search: q.trim() },
-      isActive: true,
-    };
-
-    // Add project filter if provided
-    if (projectId) {
-      const hasAccess = await checkProjectAccess(
-        projectId as string,
-        req.user!._id.toString()
-      );
-
-      if (!hasAccess) {
-        throw createError(
-          EVIDENCE_ERROR_MESSAGES.ACCESS_DENIED,
-          403,
-          'PROJECT_ACCESS_DENIED'
-        );
-      }
-
-      searchConditions.project = projectId;
-    } else {
-      // Limit to user's accessible projects
-      const userProjects = await Project.find({
-        $or: [
-          { owner: req.user!._id },
-          { 'collaborators.user': req.user!._id },
-          { visibility: 'public' },
-        ],
-        isActive: true,
-      }).select('_id');
-
-      searchConditions.project = { $in: userProjects.map((p) => p._id) };
-    }
-
-    // Execute search
-    const evidence = await Evidence.find(
-      searchConditions,
-      { score: { $meta: 'textScore' } }
-    )
-      .sort({ score: { $meta: 'textScore' } })
-      .limit(Math.min(Number(limit), VALIDATION_LIMITS.SEARCH_MAX_RESULTS))
-      .populate('addedBy', 'firstName lastName email')
-      .populate('project', 'name');
-
-    res.json({
-      success: true,
-      data: evidence,
-      meta: {
-        query: q,
-        count: evidence.length,
-        limit: Number(limit),
-      },
     });
   })
 );
