@@ -539,4 +539,80 @@ router.put('/:id',
   })
 );
 
+/**
+ * DELETE /api/evidence/:id - Soft delete evidence
+ */
+router.delete('/:id',
+  authenticate,
+  validate(validationSchemas.objectId, 'params'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+
+    // Find evidence
+    const evidence = await Evidence.findOne({ _id: id, isActive: true })
+      .populate('project', 'owner collaborators');
+
+    if (!evidence) {
+      throw createError(
+        EVIDENCE_ERROR_MESSAGES.NOT_FOUND,
+        404,
+        'EVIDENCE_NOT_FOUND'
+      );
+    }
+
+    // Check delete permissions
+    const userId = req.user!._id.toString();
+    const project = evidence.project as any;
+    const canDelete = evidence.addedBy.toString() === userId ||
+      project.owner.toString() === userId ||
+      project.collaborators.some((c: any) =>
+        c.user.toString() === userId && c.permissions?.canDelete
+      );
+
+    if (!canDelete) {
+      throw createError(
+        'No permission to delete this evidence',
+        403,
+        'DELETE_PERMISSION_DENIED'
+      );
+    }
+
+    // Soft delete
+    evidence.isActive = false;
+    await evidence.save();
+
+    // Remove evidence reference from linked claims
+    if (evidence.claims && evidence.claims.length > 0) {
+      await Claim.updateMany(
+        { _id: { $in: evidence.claims } },
+        { $pull: { evidence: evidence._id } }
+      );
+    }
+
+    // Update project statistics
+    await Project.findByIdAndUpdate(evidence.project._id, {
+      $inc: { 'statistics.totalEvidence': -1 },
+    });
+
+    // Clear caches
+    await redisManager.deletePattern('evidence:*');
+    await redisManager.deletePattern('claims:*');
+    await redisManager.deletePattern('graph:*');
+
+    // Track activity
+    await redisManager.trackUserActivity(userId, {
+      action: 'delete_evidence',
+      evidenceId: evidence._id,
+      projectId: evidence.project._id,
+    });
+
+    logger.info(`Evidence deleted: ${evidence._id} by ${req.user!.email}`);
+
+    res.json({
+      success: true,
+      message: 'Evidence deleted successfully',
+    });
+  })
+);
+
 export default router;
