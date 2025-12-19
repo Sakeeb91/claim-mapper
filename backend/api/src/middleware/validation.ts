@@ -181,6 +181,8 @@ export const validationSchemas = {
 
   // Evidence validation
   createEvidence: Joi.object({
+    projectId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).required(),
+    claimIds: Joi.array().items(Joi.string().pattern(/^[0-9a-fA-F]{24}$/)).max(20),
     text: Joi.string().min(10).max(5000).required(),
     type: Joi.string().valid('empirical', 'statistical', 'testimonial', 'expert', 'documented', 'anecdotal').required(),
     source: Joi.object({

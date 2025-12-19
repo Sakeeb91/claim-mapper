@@ -308,4 +308,138 @@ router.get('/:id',
   })
 );
 
+/**
+ * POST /api/evidence - Create new evidence
+ *
+ * Body:
+ * - projectId: Project to add evidence to (required)
+ * - claimIds: Array of claim IDs to link (optional)
+ * - text: Evidence text (required)
+ * - type: Evidence type (required)
+ * - source: Source information (required)
+ * - reliability: Reliability assessment (required)
+ * - relevance: Relevance assessment (required)
+ * - keywords: Array of keywords (optional)
+ * - tags: Array of tags (optional)
+ */
+router.post('/',
+  authenticate,
+  sanitize,
+  validate(validationSchemas.createEvidence),
+  asyncHandler(async (req: Request, res: Response) => {
+    const {
+      projectId,
+      claimIds,
+      text,
+      type,
+      source,
+      reliability,
+      relevance,
+      keywords,
+      tags,
+    } = req.body;
+
+    // Check project access
+    const project = await Project.findById(projectId);
+    if (!project || !project.isActive) {
+      throw createError('Project not found', 404, 'PROJECT_NOT_FOUND');
+    }
+
+    const userId = req.user!._id.toString();
+    const hasAccess = await checkEditPermission(projectId, userId);
+
+    if (!hasAccess) {
+      throw createError(
+        EVIDENCE_ERROR_MESSAGES.ACCESS_DENIED,
+        403,
+        'PROJECT_EDIT_DENIED'
+      );
+    }
+
+    // Validate claims exist and belong to same project
+    let validClaimIds: string[] = [];
+    if (claimIds && claimIds.length > 0) {
+      const claims = await Claim.find({
+        _id: { $in: claimIds },
+        project: projectId,
+        isActive: true,
+      });
+
+      if (claims.length !== claimIds.length) {
+        throw createError(
+          EVIDENCE_ERROR_MESSAGES.CLAIM_NOT_FOUND,
+          404,
+          'CLAIM_NOT_FOUND'
+        );
+      }
+
+      validClaimIds = claims.map((c) => c._id.toString());
+    }
+
+    // Create evidence
+    const evidence = new Evidence({
+      text,
+      type,
+      source,
+      reliability,
+      relevance,
+      keywords: keywords || [],
+      tags: tags || [],
+      project: projectId,
+      addedBy: req.user!._id,
+      claims: validClaimIds,
+      metadata: {
+        confidence: reliability.score,
+        processingDate: new Date(),
+      },
+    });
+
+    await evidence.save();
+
+    // Update claims to include this evidence
+    if (validClaimIds.length > 0) {
+      await Claim.updateMany(
+        { _id: { $in: validClaimIds } },
+        { $addToSet: { evidence: evidence._id } }
+      );
+    }
+
+    // Update project statistics
+    await Project.findByIdAndUpdate(projectId, {
+      $inc: { 'statistics.totalEvidence': 1 },
+    });
+
+    // Populate for response
+    await evidence.populate([
+      { path: 'addedBy', select: 'firstName lastName email' },
+      { path: 'project', select: 'name' },
+      { path: 'claims', select: 'text type confidence' },
+    ]);
+
+    // Clear related caches
+    await redisManager.deletePattern('evidence:*');
+    await redisManager.deletePattern('claims:*');
+    await redisManager.deletePattern('graph:*');
+
+    // Track activity
+    await redisManager.trackUserActivity(userId, {
+      action: 'create_evidence',
+      evidenceId: evidence._id,
+      projectId,
+      linkedClaims: validClaimIds.length,
+    });
+
+    logger.info(`Evidence created: ${evidence._id} by ${req.user!.email}`, {
+      projectId,
+      claimCount: validClaimIds.length,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Evidence created successfully',
+      data: evidence,
+    });
+  })
+);
+
 export default router;
