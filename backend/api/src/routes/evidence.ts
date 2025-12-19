@@ -1040,4 +1040,167 @@ router.post('/:id/annotations',
   })
 );
 
+/**
+ * POST /api/evidence/:id/relationships - Add relationship to another evidence
+ *
+ * Body:
+ * - targetId: ID of the target evidence (required)
+ * - type: Relationship type (supports, contradicts, related, extends)
+ * - confidence: Confidence score 0-1 (optional, default 0.8)
+ * - notes: Optional notes about the relationship
+ */
+router.post('/:id/relationships',
+  authenticate,
+  validate(validationSchemas.objectId, 'params'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { targetId, type, confidence = 0.8, notes } = req.body;
+
+    // Validate targetId
+    if (!targetId || !/^[0-9a-fA-F]{24}$/.test(targetId)) {
+      throw createError(
+        'Valid target evidence ID is required',
+        400,
+        'INVALID_TARGET_ID'
+      );
+    }
+
+    // Cannot create relationship to self
+    if (id === targetId) {
+      throw createError(
+        'Cannot create relationship to self',
+        400,
+        'SELF_RELATIONSHIP'
+      );
+    }
+
+    // Validate relationship type
+    const validTypes = ['supports', 'contradicts', 'related', 'extends'];
+    if (!type || !validTypes.includes(type)) {
+      throw createError(
+        `Invalid relationship type. Must be one of: ${validTypes.join(', ')}`,
+        400,
+        'INVALID_RELATIONSHIP_TYPE'
+      );
+    }
+
+    // Find source evidence
+    const evidence = await Evidence.findOne({ _id: id, isActive: true })
+      .populate('project', 'owner collaborators');
+
+    if (!evidence) {
+      throw createError(
+        EVIDENCE_ERROR_MESSAGES.NOT_FOUND,
+        404,
+        'EVIDENCE_NOT_FOUND'
+      );
+    }
+
+    // Find target evidence
+    const targetEvidence = await Evidence.findOne({ _id: targetId, isActive: true });
+
+    if (!targetEvidence) {
+      throw createError(
+        'Target evidence not found',
+        404,
+        'TARGET_EVIDENCE_NOT_FOUND'
+      );
+    }
+
+    // Ensure both evidence items are in the same project
+    if (evidence.project._id.toString() !== targetEvidence.project.toString()) {
+      throw createError(
+        'Cannot create relationship between evidence in different projects',
+        400,
+        'CROSS_PROJECT_RELATIONSHIP'
+      );
+    }
+
+    // Check edit permissions
+    const userId = req.user!._id.toString();
+    const canEdit = await checkEditPermission(
+      evidence.project._id.toString(),
+      userId,
+      evidence.addedBy.toString()
+    );
+
+    if (!canEdit) {
+      throw createError(
+        'No permission to modify this evidence',
+        403,
+        'EDIT_PERMISSION_DENIED'
+      );
+    }
+
+    // Check relationship limit
+    if (evidence.relationships.length >= VALIDATION_LIMITS.EVIDENCE_MAX_RELATIONSHIPS) {
+      throw createError(
+        EVIDENCE_ERROR_MESSAGES.MAX_RELATIONSHIPS_REACHED,
+        400,
+        'MAX_RELATIONSHIPS_REACHED'
+      );
+    }
+
+    // Check for existing relationship
+    const existingRelation = evidence.relationships.find(
+      (r: any) => r.evidenceId.toString() === targetId
+    );
+
+    if (existingRelation) {
+      throw createError(
+        'Relationship to this evidence already exists',
+        400,
+        'RELATIONSHIP_EXISTS'
+      );
+    }
+
+    // Add relationship
+    evidence.relationships.push({
+      evidenceId: targetId,
+      type,
+      confidence: Math.min(1, Math.max(0, confidence)),
+      notes,
+      createdAt: new Date(),
+    });
+
+    await evidence.save();
+
+    // Optionally add reciprocal relationship for certain types
+    if (type === 'related') {
+      const reciprocalExists = targetEvidence.relationships.find(
+        (r: any) => r.evidenceId.toString() === id
+      );
+
+      if (!reciprocalExists && targetEvidence.relationships.length < VALIDATION_LIMITS.EVIDENCE_MAX_RELATIONSHIPS) {
+        targetEvidence.relationships.push({
+          evidenceId: id,
+          type: 'related',
+          confidence: Math.min(1, Math.max(0, confidence)),
+          notes,
+          createdAt: new Date(),
+        });
+        await targetEvidence.save();
+      }
+    }
+
+    // Clear caches
+    await redisManager.deletePattern('evidence:*');
+    await redisManager.deletePattern('graph:*');
+
+    // Track activity
+    await redisManager.trackUserActivity(userId, {
+      action: 'add_relationship',
+      evidenceId: evidence._id,
+      targetId,
+      relationshipType: type,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Relationship added successfully',
+      data: evidence.relationships[evidence.relationships.length - 1],
+    });
+  })
+);
+
 export default router;
