@@ -221,6 +221,48 @@ export const validationSchemas = {
     tags: Joi.array().items(Joi.string().max(30)).max(10),
   }),
 
+  // Update Evidence validation
+  updateEvidence: Joi.object({
+    text: Joi.string().min(10).max(5000),
+    type: Joi.string().valid('empirical', 'statistical', 'testimonial', 'expert', 'documented', 'anecdotal'),
+    source: Joi.object({
+      type: Joi.string().valid('document', 'url', 'database', 'survey', 'interview', 'observation'),
+      reference: Joi.string(),
+      author: Joi.string(),
+      title: Joi.string(),
+      publication: Joi.string(),
+      publishedDate: Joi.date(),
+      accessedDate: Joi.date(),
+      doi: Joi.string().pattern(/^10\.\d{4,}\//),
+      isbn: Joi.string(),
+      url: Joi.string().uri(),
+      page: Joi.number().integer().min(1),
+      section: Joi.string(),
+    }),
+    reliability: Joi.object({
+      score: Joi.number().min(0).max(1),
+      factors: Joi.object({
+        sourceCredibility: Joi.number().min(0).max(1),
+        methodologyQuality: Joi.number().min(0).max(1),
+        replication: Joi.number().min(0).max(1),
+        peerReview: Joi.boolean(),
+        sampleSize: Joi.number().integer().min(0),
+        biasAssessment: Joi.number().min(0).max(1),
+      }),
+      notes: Joi.string().max(500),
+    }),
+    relevance: Joi.object({
+      score: Joi.number().min(0).max(1),
+      contextual: Joi.boolean(),
+      temporal: Joi.boolean(),
+      geographical: Joi.boolean(),
+      demographic: Joi.boolean(),
+      notes: Joi.string().max(500),
+    }),
+    keywords: Joi.array().items(Joi.string().max(50)).max(20),
+    tags: Joi.array().items(Joi.string().max(30)).max(10),
+  }),
+
   // Reasoning Chain validation
   createReasoningChain: Joi.object({
     claim: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).required(),
