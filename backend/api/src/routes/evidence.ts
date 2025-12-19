@@ -1,3 +1,32 @@
+/**
+ * Evidence API Routes
+ *
+ * This module provides a complete RESTful API for managing evidence in the
+ * Claim Mapper system. Evidence represents supporting or contradicting data
+ * that backs up claims in the knowledge graph.
+ *
+ * @module routes/evidence
+ *
+ * Endpoints:
+ * - GET    /api/evidence              - List evidence with filtering
+ * - GET    /api/evidence/search       - Full-text search
+ * - GET    /api/evidence/claim/:id    - Get evidence for a claim
+ * - GET    /api/evidence/project/:id/stats - Project statistics
+ * - GET    /api/evidence/:id          - Get single evidence
+ * - POST   /api/evidence              - Create evidence
+ * - POST   /api/evidence/batch        - Batch operations
+ * - POST   /api/evidence/:id/verify   - Verify evidence
+ * - POST   /api/evidence/:id/dispute  - Dispute evidence
+ * - POST   /api/evidence/:id/retract  - Retract evidence
+ * - POST   /api/evidence/:id/annotations - Add annotation
+ * - POST   /api/evidence/:id/relationships - Add relationship
+ * - POST   /api/evidence/:id/claims   - Link/unlink claims
+ * - PUT    /api/evidence/:id          - Update evidence
+ * - PUT    /api/evidence/:id/quality  - Update quality scores
+ * - PUT    /api/evidence/:id/usage    - Track usage
+ * - DELETE /api/evidence/:id          - Soft delete evidence
+ */
+
 import express from 'express';
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
