@@ -615,4 +615,84 @@ router.delete('/:id',
   })
 );
 
+/**
+ * POST /api/evidence/:id/verify - Mark evidence as verified
+ *
+ * Body:
+ * - notes: Optional verification notes
+ */
+router.post('/:id/verify',
+  authenticate,
+  validate(validationSchemas.objectId, 'params'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { notes } = req.body;
+
+    // Find evidence
+    const evidence = await Evidence.findOne({ _id: id, isActive: true })
+      .populate('project', 'owner collaborators');
+
+    if (!evidence) {
+      throw createError(
+        EVIDENCE_ERROR_MESSAGES.NOT_FOUND,
+        404,
+        'EVIDENCE_NOT_FOUND'
+      );
+    }
+
+    // Check if already verified
+    if (evidence.verification.status === 'verified') {
+      throw createError(
+        EVIDENCE_ERROR_MESSAGES.ALREADY_VERIFIED,
+        400,
+        'ALREADY_VERIFIED'
+      );
+    }
+
+    // Only project owner or admins can verify
+    const userId = req.user!._id.toString();
+    const project = evidence.project as any;
+    const canVerify = project.owner.toString() === userId ||
+      project.collaborators.some((c: any) =>
+        c.user.toString() === userId && c.role === 'admin'
+      );
+
+    if (!canVerify) {
+      throw createError(
+        'Only project owners or admins can verify evidence',
+        403,
+        'VERIFY_PERMISSION_DENIED'
+      );
+    }
+
+    // Update verification status using the model method
+    await evidence.verify(userId, notes);
+
+    // Re-populate for response
+    await evidence.populate([
+      { path: 'addedBy', select: 'firstName lastName email' },
+      { path: 'verification.verifiedBy', select: 'firstName lastName email' },
+      { path: 'project', select: 'name' },
+    ]);
+
+    // Clear caches
+    await redisManager.deletePattern('evidence:*');
+
+    // Track activity
+    await redisManager.trackUserActivity(userId, {
+      action: 'verify_evidence',
+      evidenceId: evidence._id,
+      projectId: evidence.project,
+    });
+
+    logger.info(`Evidence verified: ${evidence._id} by ${req.user!.email}`);
+
+    res.json({
+      success: true,
+      message: 'Evidence verified successfully',
+      data: evidence,
+    });
+  })
+);
+
 export default router;
