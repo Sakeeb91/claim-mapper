@@ -895,3 +895,141 @@ router.post('/',
     });
   })
 );
+
+/**
+ * PUT /api/reasoning/:id - Update reasoning chain
+ */
+router.put('/:id',
+  authenticate,
+  sanitize,
+  validate(validationSchemas.objectId, 'params'),
+  validate(validationSchemas.updateReasoningChain),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const updates = req.body;
+
+    const reasoningChain = await ReasoningChain.findOne({ _id: id, isActive: true })
+      .populate('project', 'owner collaborators');
+
+    if (!reasoningChain) {
+      throw createError(REASONING_ERROR_MESSAGES.NOT_FOUND, 404, 'REASONING_NOT_FOUND');
+    }
+
+    // Check if chain can be modified
+    if (reasoningChain.status === 'archived') {
+      throw createError(
+        REASONING_ERROR_MESSAGES.CANNOT_MODIFY_ARCHIVED,
+        403,
+        'CANNOT_MODIFY_ARCHIVED'
+      );
+    }
+
+    if (reasoningChain.status === 'published' && !updates.status) {
+      throw createError(
+        REASONING_ERROR_MESSAGES.CANNOT_MODIFY_PUBLISHED,
+        403,
+        'CANNOT_MODIFY_PUBLISHED'
+      );
+    }
+
+    // Check edit permissions
+    const userId = req.user!._id.toString();
+    const canEdit = await checkEditPermission(
+      reasoningChain.project._id.toString(),
+      userId,
+      reasoningChain.creator.toString()
+    );
+
+    if (!canEdit) {
+      throw createError('No permission to edit this reasoning chain', 403, 'EDIT_PERMISSION_DENIED');
+    }
+
+    // Apply updates
+    const allowedUpdates = ['type', 'steps', 'tags', 'status'];
+    for (const key of allowedUpdates) {
+      if (updates[key] !== undefined) {
+        (reasoningChain as any)[key] = updates[key];
+      }
+    }
+
+    await reasoningChain.save();
+
+    // Re-populate for response
+    await reasoningChain.populate([
+      { path: 'claim', select: 'text type confidence' },
+      { path: 'creator', select: 'firstName lastName email' },
+      { path: 'project', select: 'name' },
+    ]);
+
+    // Clear caches
+    await redisManager.deletePattern('reasoning:*');
+
+    // Track activity
+    await redisManager.trackUserActivity(userId, {
+      action: 'update_reasoning',
+      reasoningChainId: reasoningChain._id,
+      updatedFields: Object.keys(updates),
+    });
+
+    logger.info(`Reasoning chain updated: ${reasoningChain._id} by ${req.user!.email}`);
+
+    res.json({
+      success: true,
+      message: 'Reasoning chain updated successfully',
+      data: reasoningChain,
+    });
+  })
+);
+
+/**
+ * DELETE /api/reasoning/:id - Soft delete reasoning chain
+ */
+router.delete('/:id',
+  authenticate,
+  validate(validationSchemas.objectId, 'params'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+
+    const reasoningChain = await ReasoningChain.findOne({ _id: id, isActive: true })
+      .populate('project', 'owner collaborators');
+
+    if (!reasoningChain) {
+      throw createError(REASONING_ERROR_MESSAGES.NOT_FOUND, 404, 'REASONING_NOT_FOUND');
+    }
+
+    // Check delete permissions
+    const userId = req.user!._id.toString();
+    const project = reasoningChain.project as any;
+    const canDelete = reasoningChain.creator.toString() === userId ||
+      project.owner.toString() === userId ||
+      project.collaborators.some((c: any) =>
+        c.user.toString() === userId && c.permissions?.canDelete
+      );
+
+    if (!canDelete) {
+      throw createError('No permission to delete this reasoning chain', 403, 'DELETE_PERMISSION_DENIED');
+    }
+
+    // Soft delete
+    reasoningChain.isActive = false;
+    await reasoningChain.save();
+
+    // Clear caches
+    await redisManager.deletePattern('reasoning:*');
+    await redisManager.deletePattern(`reasoning:claim:${reasoningChain.claim}:*`);
+
+    // Track activity
+    await redisManager.trackUserActivity(userId, {
+      action: 'delete_reasoning',
+      reasoningChainId: reasoningChain._id,
+      claimId: reasoningChain.claim,
+    });
+
+    logger.info(`Reasoning chain deleted: ${reasoningChain._id} by ${req.user!.email}`);
+
+    res.json({
+      success: true,
+      message: 'Reasoning chain deleted successfully',
+    });
+  })
+);
