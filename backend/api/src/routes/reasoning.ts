@@ -523,3 +523,211 @@ router.get('/search',
     });
   })
 );
+
+/**
+ * GET /api/reasoning/claim/:claimId - Get all reasoning chains for a specific claim
+ */
+router.get('/claim/:claimId',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { claimId } = req.params;
+
+    if (!/^[0-9a-fA-F]{24}$/.test(claimId)) {
+      throw createError('Invalid claim ID format', 400, 'INVALID_CLAIM_ID');
+    }
+
+    // Check cache first
+    const cacheKey = `reasoning:claim:${claimId}:${req.user!._id.toString()}`;
+    const cachedResult = await redisManager.get(cacheKey);
+    if (cachedResult) {
+      return res.json({
+        success: true,
+        data: cachedResult,
+        cached: true,
+      });
+    }
+
+    // Find the claim and verify access
+    const claim = await Claim.findOne({ _id: claimId, isActive: true })
+      .populate('project', 'owner collaborators visibility');
+
+    if (!claim) {
+      throw createError(REASONING_ERROR_MESSAGES.CLAIM_NOT_FOUND, 404, 'CLAIM_NOT_FOUND');
+    }
+
+    const project = claim.project as any;
+    const userId = req.user!._id.toString();
+    const hasAccess = project.visibility === 'public' ||
+      project.owner.toString() === userId ||
+      project.collaborators.some((c: any) => c.user.toString() === userId);
+
+    if (!hasAccess) {
+      throw createError(REASONING_ERROR_MESSAGES.ACCESS_DENIED, 403, 'CLAIM_ACCESS_DENIED');
+    }
+
+    // Find all reasoning chains for this claim
+    const reasoningChains = await ReasoningChain.find({
+      claim: claimId,
+      isActive: true,
+    })
+      .populate('creator', 'firstName lastName email')
+      .populate('steps.evidence', 'text type reliability.score')
+      .sort({ 'validity.overallScore': -1, createdAt: -1 });
+
+    // Cache result
+    await redisManager.set(cacheKey, reasoningChains, VALIDATION_LIMITS.REASONING_CACHE_TTL);
+
+    res.json({
+      success: true,
+      data: reasoningChains,
+      meta: {
+        claimId,
+        count: reasoningChains.length,
+      },
+    });
+  })
+);
+
+// ============================================================================
+// LIST AND CRUD ROUTES
+// ============================================================================
+
+/**
+ * GET /api/reasoning - List reasoning chains with filtering
+ *
+ * Query params:
+ * - projectId: Filter by project
+ * - claimId: Filter by associated claim
+ * - type: Filter by reasoning type
+ * - status: Filter by status
+ * - minValidity: Minimum validity score
+ * - complexity: Filter by complexity level
+ * - page: Page number (default 1)
+ * - limit: Items per page (default 20, max 100)
+ * - sort: Sort field (default 'updatedAt')
+ * - order: Sort order 'asc' or 'desc' (default 'desc')
+ */
+router.get('/',
+  authenticate,
+  validatePagination,
+  asyncHandler(async (req: Request, res: Response) => {
+    const {
+      page = 1,
+      limit = 20,
+      sort = 'updatedAt',
+      order = 'desc',
+      projectId,
+      claimId,
+      type,
+      status,
+      minValidity,
+      complexity,
+      tags,
+    } = req.query;
+
+    const query: any = { isActive: true };
+
+    // Project filter with access check
+    if (projectId) {
+      const hasAccess = await checkProjectAccess(
+        projectId as string,
+        req.user!._id.toString()
+      );
+
+      if (!hasAccess) {
+        throw createError(REASONING_ERROR_MESSAGES.ACCESS_DENIED, 403, 'PROJECT_ACCESS_DENIED');
+      }
+
+      query.project = projectId;
+    } else {
+      const userProjects = await Project.find({
+        $or: [
+          { owner: req.user!._id },
+          { 'collaborators.user': req.user!._id },
+          { visibility: 'public' },
+        ],
+        isActive: true,
+      }).select('_id');
+
+      query.project = { $in: userProjects.map((p) => p._id) };
+    }
+
+    if (claimId) query.claim = claimId;
+    if (type) query.type = type;
+    if (status) query.status = status;
+    if (complexity) query['metadata.complexity'] = complexity;
+    if (minValidity) {
+      query['validity.overallScore'] = { $gte: parseFloat(minValidity as string) };
+    }
+    if (tags) {
+      const tagArray = Array.isArray(tags) ? tags : [tags];
+      query.tags = { $in: tagArray };
+    }
+
+    // Build cache key
+    const cacheKey = `reasoning:list:${JSON.stringify({
+      query,
+      page,
+      limit,
+      sort,
+      order,
+      userId: req.user!._id.toString(),
+    })}`;
+
+    // Check cache first
+    const cachedResult = await redisManager.get(cacheKey);
+    if (cachedResult) {
+      logger.debug('Reasoning list served from cache', { cacheKey });
+      return res.json({
+        success: true,
+        data: cachedResult.reasoningChains,
+        pagination: cachedResult.pagination,
+        cached: true,
+      });
+    }
+
+    const skip = (Number(page) - 1) * Number(limit);
+    const sortObj: any = {};
+    sortObj[sort as string] = order === 'asc' ? 1 : -1;
+
+    const [reasoningChains, total] = await Promise.all([
+      ReasoningChain.find(query)
+        .populate('claim', 'text type confidence')
+        .populate('creator', 'firstName lastName email')
+        .populate('project', 'name visibility')
+        .sort(sortObj)
+        .skip(skip)
+        .limit(Math.min(Number(limit), VALIDATION_LIMITS.MAX_PAGE_SIZE)),
+      ReasoningChain.countDocuments(query),
+    ]);
+
+    const pagination = {
+      page: Number(page),
+      limit: Number(limit),
+      total,
+      totalPages: Math.ceil(total / Number(limit)),
+      hasNext: Number(page) < Math.ceil(total / Number(limit)),
+      hasPrev: Number(page) > 1,
+    };
+
+    // Cache result
+    await redisManager.set(
+      cacheKey,
+      { reasoningChains, pagination },
+      VALIDATION_LIMITS.REASONING_CACHE_TTL
+    );
+
+    logger.info('Reasoning chains fetched', {
+      count: reasoningChains.length,
+      total,
+      projectId,
+      userId: req.user!._id.toString(),
+    });
+
+    res.json({
+      success: true,
+      data: reasoningChains,
+      pagination,
+    });
+  })
+);
