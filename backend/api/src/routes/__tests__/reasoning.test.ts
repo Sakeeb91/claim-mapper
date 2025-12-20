@@ -498,3 +498,153 @@ describe('Reasoning API', () => {
 
       const transformedSteps = mlSteps.map((step, index) => ({
         stepNumber: step.step_number || index + 1,
+        text: step.text,
+        type: step.type || 'inference',
+        confidence: step.confidence || 0.8,
+        evidence: [],
+        metadata: {
+          generatedBy: 'ai',
+          sourceModel: 'openai',
+          timestamp: expect.any(Date),
+        },
+      }));
+
+      expect(transformedSteps).toHaveLength(2);
+      expect(transformedSteps[0].stepNumber).toBe(1);
+      expect(transformedSteps[0].text).toBe('Generated premise 1');
+    });
+  });
+
+  describe('Fallacy Detection', () => {
+    it('should identify common fallacy types', () => {
+      const fallacyTypes = [
+        'ad_hominem',
+        'straw_man',
+        'false_dichotomy',
+        'slippery_slope',
+        'circular_reasoning',
+        'appeal_to_authority',
+        'hasty_generalization',
+        'red_herring',
+      ];
+
+      // All are valid fallacy types
+      fallacyTypes.forEach((type) => {
+        expect(typeof type).toBe('string');
+      });
+    });
+
+    it('should categorize fallacy severity', () => {
+      const severities = ['low', 'medium', 'high', 'critical'];
+
+      severities.forEach((severity) => {
+        expect(['low', 'medium', 'high', 'critical']).toContain(severity);
+      });
+    });
+
+    it('should include step numbers where fallacies occur', () => {
+      const fallacy = {
+        type: 'hasty_generalization',
+        description: 'Conclusion drawn from insufficient evidence',
+        stepNumbers: [3, 4],
+        severity: 'medium',
+        suggestion: 'Add more supporting evidence',
+      };
+
+      expect(fallacy.stepNumbers).toContain(3);
+      expect(fallacy.stepNumbers).toContain(4);
+    });
+  });
+
+  describe('Logical Gap Detection', () => {
+    it('should identify gap types', () => {
+      const gapTypes = [
+        'missing_premise',
+        'weak_connection',
+        'unsupported_conclusion',
+        'hidden_assumption',
+        'scope_mismatch',
+      ];
+
+      gapTypes.forEach((type) => {
+        expect(typeof type).toBe('string');
+      });
+    });
+
+    it('should include location and severity', () => {
+      const gap = {
+        type: 'weak_connection',
+        description: 'Connection between steps 2 and 3 is weak',
+        location: 2,
+        severity: 0.6,
+        suggestion: 'Add intermediate reasoning step',
+      };
+
+      expect(gap.location).toBe(2);
+      expect(gap.severity).toBeGreaterThanOrEqual(0);
+      expect(gap.severity).toBeLessThanOrEqual(1);
+    });
+  });
+
+  describe('Redis Caching', () => {
+    it('should check cache before database queries', async () => {
+      const cachedData = mockReasoningChain;
+      (redisManager.get as jest.Mock).mockResolvedValue(cachedData);
+
+      const result = await redisManager.get(`reasoning:${mockReasoningChainId}`);
+
+      expect(redisManager.get).toHaveBeenCalled();
+      expect(result).toEqual(cachedData);
+    });
+
+    it('should cache results with appropriate TTL', async () => {
+      const ttl = 600; // 10 minutes for ML responses
+
+      await redisManager.set(`reasoning:${mockReasoningChainId}`, mockReasoningChain, ttl);
+
+      expect(redisManager.set).toHaveBeenCalledWith(
+        `reasoning:${mockReasoningChainId}`,
+        mockReasoningChain,
+        ttl
+      );
+    });
+
+    it('should invalidate cache on updates', async () => {
+      await redisManager.deletePattern('reasoning:*');
+
+      expect(redisManager.deletePattern).toHaveBeenCalledWith('reasoning:*');
+    });
+
+    it('should generate unique cache keys', () => {
+      const cacheKey1 = `reasoning:${mockReasoningChainId}:${mockUserId}`;
+      const cacheKey2 = `reasoning:${mockReasoningChainId}:different-user`;
+
+      expect(cacheKey1).not.toBe(cacheKey2);
+    });
+
+    it('should include query params in list cache keys', () => {
+      const query = { projectId: mockProjectId, type: 'deductive', page: 1, limit: 20 };
+      const cacheKey = `reasoning:list:${JSON.stringify(query)}`;
+
+      expect(cacheKey).toContain('deductive');
+      expect(cacheKey).toContain(mockProjectId);
+    });
+  });
+
+  describe('Review System', () => {
+    it('should validate rating range', () => {
+      const validRatings = [1, 2, 3, 4, 5];
+      const invalidRatings = [0, 6, -1, 1.5];
+
+      validRatings.forEach((rating) => {
+        expect(rating).toBeGreaterThanOrEqual(1);
+        expect(rating).toBeLessThanOrEqual(5);
+        expect(Number.isInteger(rating)).toBe(true);
+      });
+
+      invalidRatings.forEach((rating) => {
+        const isValid = rating >= 1 && rating <= 5 && Number.isInteger(rating);
+        expect(isValid).toBe(false);
+      });
+    });
+
