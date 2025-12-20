@@ -1033,3 +1033,246 @@ router.delete('/:id',
     });
   })
 );
+
+// ============================================================================
+// ML SERVICE INTEGRATION ROUTES
+// ============================================================================
+
+/**
+ * POST /api/reasoning/:id/validate - Validate reasoning chain with ML service
+ *
+ * Validates the logical structure and validity of reasoning steps
+ */
+router.post('/:id/validate',
+  authenticate,
+  validate(validationSchemas.objectId, 'params'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+
+    const reasoningChain = await ReasoningChain.findOne({ _id: id, isActive: true })
+      .populate('project', 'owner collaborators visibility')
+      .populate('claim', 'text');
+
+    if (!reasoningChain) {
+      throw createError(REASONING_ERROR_MESSAGES.NOT_FOUND, 404, 'REASONING_NOT_FOUND');
+    }
+
+    // Check access
+    const project = reasoningChain.project as any;
+    const userId = req.user!._id.toString();
+    const hasAccess = project.visibility === 'public' ||
+      project.owner.toString() === userId ||
+      project.collaborators.some((c: any) => c.user.toString() === userId);
+
+    if (!hasAccess) {
+      throw createError(REASONING_ERROR_MESSAGES.ACCESS_DENIED, 403, 'ACCESS_DENIED');
+    }
+
+    // Check cache
+    const cacheKey = `reasoning:validate:${id}`;
+    const cachedResult = await redisManager.get(cacheKey);
+    if (cachedResult) {
+      return res.json({
+        success: true,
+        data: cachedResult,
+        cached: true,
+      });
+    }
+
+    // Get related evidence for context
+    const evidenceIds = reasoningChain.steps.flatMap((step) => step.evidence);
+    const evidence = await Evidence.find({ _id: { $in: evidenceIds } }).select('text');
+    const evidenceTexts = evidence.map((e) => e.text);
+
+    // Call ML service
+    const mlResponse = await callMLService<any>('/reasoning/validate', {
+      claim: (reasoningChain.claim as any).text,
+      reasoning_steps: reasoningChain.steps.map((s) => s.text),
+      reasoning_type: reasoningChain.type,
+      evidence: evidenceTexts,
+    });
+
+    // Update reasoning chain with validation results
+    reasoningChain.validity = {
+      logicalValidity: mlResponse.logical_validity || 0,
+      soundness: mlResponse.validation_score || 0,
+      completeness: 0.7,
+      coherence: 0.7,
+      overallScore: mlResponse.validation_score || 0,
+      assessedBy: req.user!._id,
+      assessedAt: new Date(),
+      validationNotes: mlResponse.is_valid ? 'Validated via ML service' : 'Issues found during validation',
+    };
+
+    // Update analysis with any issues found
+    if (mlResponse.issues) {
+      reasoningChain.analysis.fallacies = mlResponse.issues.fallacies || [];
+      reasoningChain.analysis.gaps = (mlResponse.issues.logical_gaps || []).map((gap: any) => ({
+        type: gap.type || 'weak_connection',
+        description: gap.description || gap.message || 'Logical gap detected',
+        location: gap.location || 1,
+        severity: gap.severity || 0.5,
+        suggestion: gap.suggestion || 'Review and strengthen this connection',
+      }));
+    }
+
+    await reasoningChain.save();
+
+    const result = {
+      validationScore: mlResponse.validation_score,
+      logicalValidity: mlResponse.logical_validity,
+      isValid: mlResponse.is_valid,
+      issues: mlResponse.issues,
+      stepAnalysis: mlResponse.step_analysis,
+      recommendations: mlResponse.recommendations,
+    };
+
+    // Cache result
+    await redisManager.set(cacheKey, result, VALIDATION_LIMITS.REASONING_CACHE_TTL);
+
+    // Track activity
+    await redisManager.trackUserActivity(userId, {
+      action: 'validate_reasoning',
+      reasoningChainId: reasoningChain._id,
+      validationScore: mlResponse.validation_score,
+    });
+
+    res.json({
+      success: true,
+      message: 'Reasoning chain validated',
+      data: result,
+    });
+  })
+);
+
+/**
+ * POST /api/reasoning/:id/fallacies - Detect fallacies in reasoning chain
+ *
+ * Uses ML service to identify logical fallacies, gaps, and weaknesses
+ */
+router.post('/:id/fallacies',
+  authenticate,
+  validate(validationSchemas.objectId, 'params'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const {
+      includeFallacies = true,
+      includeGaps = true,
+      includeCounterarguments = false,
+    } = req.body;
+
+    const reasoningChain = await ReasoningChain.findOne({ _id: id, isActive: true })
+      .populate('project', 'owner collaborators visibility')
+      .populate('claim', 'text');
+
+    if (!reasoningChain) {
+      throw createError(REASONING_ERROR_MESSAGES.NOT_FOUND, 404, 'REASONING_NOT_FOUND');
+    }
+
+    // Check access
+    const project = reasoningChain.project as any;
+    const userId = req.user!._id.toString();
+    const hasAccess = project.visibility === 'public' ||
+      project.owner.toString() === userId ||
+      project.collaborators.some((c: any) => c.user.toString() === userId);
+
+    if (!hasAccess) {
+      throw createError(REASONING_ERROR_MESSAGES.ACCESS_DENIED, 403, 'ACCESS_DENIED');
+    }
+
+    // Check cache
+    const cacheKey = `reasoning:fallacies:${id}:${includeFallacies}:${includeGaps}:${includeCounterarguments}`;
+    const cachedResult = await redisManager.get(cacheKey);
+    if (cachedResult) {
+      return res.json({
+        success: true,
+        data: cachedResult,
+        cached: true,
+      });
+    }
+
+    // Build request for ML service
+    const mlRequest = {
+      reasoning_chain: {
+        steps: reasoningChain.steps.map((s) => ({
+          step_number: s.stepNumber,
+          text: s.text,
+          confidence: s.confidence,
+          type: s.type,
+        })),
+        reasoning_type: reasoningChain.type,
+        logical_validity: reasoningChain.validity.logicalValidity,
+        overall_confidence: reasoningChain.validity.overallScore,
+      },
+      include_fallacies: includeFallacies,
+      include_gaps: includeGaps,
+      include_counterarguments: includeCounterarguments,
+      analysis_type: 'comprehensive',
+    };
+
+    // Call ML service
+    const mlResponse = await callMLService<any>('/reasoning/analyze', mlRequest);
+
+    // Update reasoning chain with analysis results
+    if (mlResponse.analysis_results) {
+      if (mlResponse.analysis_results.fallacies) {
+        reasoningChain.analysis.fallacies = mlResponse.analysis_results.fallacies.map((f: any) => ({
+          type: f.type || f.fallacy_type || 'unknown',
+          description: f.description || f.message,
+          stepNumbers: f.step_numbers || f.stepNumbers || [],
+          severity: f.severity || 'medium',
+          suggestion: f.suggestion || f.fix || 'Review and correct this fallacy',
+        }));
+      }
+
+      if (mlResponse.analysis_results.logical_gaps) {
+        reasoningChain.analysis.gaps = mlResponse.analysis_results.logical_gaps.map((g: any) => ({
+          type: g.type || 'weak_connection',
+          description: g.description || g.message,
+          location: g.location || g.step_number || 1,
+          severity: g.severity || 0.5,
+          suggestion: g.suggestion || 'Fill this logical gap',
+        }));
+      }
+
+      if (mlResponse.analysis_results.counterarguments) {
+        reasoningChain.analysis.counterarguments = mlResponse.analysis_results.counterarguments.map((c: any) => ({
+          text: c.text || c.argument,
+          strength: c.strength || 0.5,
+          source: c.source,
+          refutation: c.refutation,
+        }));
+      }
+    }
+
+    await reasoningChain.save();
+
+    const result = {
+      chainId: reasoningChain._id,
+      overallQuality: mlResponse.overall_quality,
+      confidence: mlResponse.confidence,
+      analysisResults: mlResponse.analysis_results,
+      recommendations: mlResponse.recommendations,
+    };
+
+    // Cache result
+    await redisManager.set(cacheKey, result, VALIDATION_LIMITS.REASONING_CACHE_TTL);
+
+    // Clear related caches
+    await redisManager.deletePattern(`reasoning:${id}:*`);
+
+    // Track activity
+    await redisManager.trackUserActivity(userId, {
+      action: 'detect_fallacies',
+      reasoningChainId: reasoningChain._id,
+      fallaciesFound: reasoningChain.analysis.fallacies.length,
+      gapsFound: reasoningChain.analysis.gaps.length,
+    });
+
+    res.json({
+      success: true,
+      message: 'Fallacy detection completed',
+      data: result,
+    });
+  })
+);
