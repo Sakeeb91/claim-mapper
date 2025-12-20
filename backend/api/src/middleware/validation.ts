@@ -267,7 +267,7 @@ export const validationSchemas = {
 
   // Reasoning Chain validation
   createReasoningChain: Joi.object({
-    claim: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).required(),
+    claimId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).required(),
     type: Joi.string().valid('deductive', 'inductive', 'abductive', 'analogical', 'causal', 'statistical').required(),
     steps: Joi.array().items(
       Joi.object({
@@ -280,6 +280,23 @@ export const validationSchemas = {
       })
     ).min(2).max(20).required(),
     tags: Joi.array().items(Joi.string().max(30)).max(10),
+  }),
+
+  // Update Reasoning Chain validation
+  updateReasoningChain: Joi.object({
+    type: Joi.string().valid('deductive', 'inductive', 'abductive', 'analogical', 'causal', 'statistical'),
+    steps: Joi.array().items(
+      Joi.object({
+        stepNumber: Joi.number().integer().min(1).required(),
+        text: Joi.string().min(10).max(1000).required(),
+        type: Joi.string().valid('premise', 'inference', 'conclusion', 'assumption', 'observation').required(),
+        confidence: Joi.number().min(0).max(1).required(),
+        evidence: Joi.array().items(Joi.string().pattern(/^[0-9a-fA-F]{24}$/)),
+        logicalOperator: Joi.string().valid('and', 'or', 'if-then', 'if-and-only-if', 'not'),
+      })
+    ).min(2).max(20),
+    tags: Joi.array().items(Joi.string().max(30)).max(10),
+    status: Joi.string().valid('draft', 'review', 'validated', 'published', 'archived'),
   }),
 
   // Search and filter validation
