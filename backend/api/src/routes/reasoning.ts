@@ -1276,3 +1276,160 @@ router.post('/:id/fallacies',
     });
   })
 );
+
+/**
+ * POST /api/reasoning/:id/strengthen - Get suggestions to improve reasoning chain
+ *
+ * Uses ML service to suggest improvements for the reasoning chain
+ */
+router.post('/:id/strengthen',
+  authenticate,
+  validate(validationSchemas.objectId, 'params'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+
+    const reasoningChain = await ReasoningChain.findOne({ _id: id, isActive: true })
+      .populate('project', 'owner collaborators visibility')
+      .populate('claim', 'text');
+
+    if (!reasoningChain) {
+      throw createError(REASONING_ERROR_MESSAGES.NOT_FOUND, 404, 'REASONING_NOT_FOUND');
+    }
+
+    // Check access
+    const project = reasoningChain.project as any;
+    const userId = req.user!._id.toString();
+    const hasAccess = project.visibility === 'public' ||
+      project.owner.toString() === userId ||
+      project.collaborators.some((c: any) => c.user.toString() === userId);
+
+    if (!hasAccess) {
+      throw createError(REASONING_ERROR_MESSAGES.ACCESS_DENIED, 403, 'ACCESS_DENIED');
+    }
+
+    // Check cache
+    const cacheKey = `reasoning:strengthen:${id}`;
+    const cachedResult = await redisManager.get(cacheKey);
+    if (cachedResult) {
+      return res.json({
+        success: true,
+        data: cachedResult,
+        cached: true,
+      });
+    }
+
+    // Get related evidence
+    const evidenceIds = reasoningChain.steps.flatMap((step) => step.evidence);
+    const evidence = await Evidence.find({ _id: { $in: evidenceIds } }).select('text');
+    const evidenceTexts = evidence.map((e) => e.text);
+
+    // Call ML service
+    const mlResponse = await callMLService<any>('/reasoning/strengthen', {
+      claim: (reasoningChain.claim as any).text,
+      reasoning_steps: reasoningChain.steps.map((s) => s.text),
+      evidence: evidenceTexts,
+      reasoning_type: reasoningChain.type,
+      complexity: reasoningChain.metadata.complexity,
+    });
+
+    const result = {
+      originalClaim: (reasoningChain.claim as any).text,
+      strengthenedReasoning: mlResponse.strengthened_reasoning,
+      improvements: mlResponse.improvements,
+      strengthIncrease: mlResponse.strength_increase,
+      additionalEvidenceNeeded: mlResponse.additional_evidence_needed,
+      qualityMetrics: mlResponse.quality_metrics,
+    };
+
+    // Cache result
+    await redisManager.set(cacheKey, result, VALIDATION_LIMITS.REASONING_CACHE_TTL);
+
+    // Track activity
+    await redisManager.trackUserActivity(userId, {
+      action: 'strengthen_reasoning',
+      reasoningChainId: reasoningChain._id,
+      strengthIncrease: mlResponse.strength_increase,
+    });
+
+    res.json({
+      success: true,
+      message: 'Reasoning strengthening suggestions generated',
+      data: result,
+    });
+  })
+);
+
+/**
+ * POST /api/reasoning/:id/review - Add a review to reasoning chain
+ *
+ * Body:
+ * - rating: Number 1-5 (required)
+ * - comments: Review comments (required)
+ * - focusAreas: Array of focus areas (optional)
+ */
+router.post('/:id/review',
+  authenticate,
+  validate(validationSchemas.objectId, 'params'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { rating, comments, focusAreas = [] } = req.body;
+
+    // Validate rating
+    if (!rating || typeof rating !== 'number' || rating < 1 || rating > 5) {
+      throw createError('Rating must be a number between 1 and 5', 400, 'INVALID_RATING');
+    }
+
+    // Validate comments
+    if (!comments || typeof comments !== 'string' || comments.trim().length < 10) {
+      throw createError('Comments must be at least 10 characters', 400, 'INVALID_COMMENTS');
+    }
+
+    const reasoningChain = await ReasoningChain.findOne({ _id: id, isActive: true })
+      .populate('project', 'owner collaborators visibility');
+
+    if (!reasoningChain) {
+      throw createError(REASONING_ERROR_MESSAGES.NOT_FOUND, 404, 'REASONING_NOT_FOUND');
+    }
+
+    // Check access
+    const project = reasoningChain.project as any;
+    const userId = req.user!._id.toString();
+    const hasAccess = project.visibility === 'public' ||
+      project.owner.toString() === userId ||
+      project.collaborators.some((c: any) => c.user.toString() === userId);
+
+    if (!hasAccess) {
+      throw createError(REASONING_ERROR_MESSAGES.ACCESS_DENIED, 403, 'ACCESS_DENIED');
+    }
+
+    // Check if user already reviewed
+    const existingReview = reasoningChain.reviews.find(
+      (r: any) => r.reviewer.toString() === userId
+    );
+
+    if (existingReview) {
+      throw createError('You have already reviewed this reasoning chain', 400, 'ALREADY_REVIEWED');
+    }
+
+    // Add review using model method
+    await reasoningChain.addReview(userId, rating, comments.trim(), focusAreas);
+
+    // Clear caches
+    await redisManager.deletePattern(`reasoning:${id}:*`);
+
+    // Track activity
+    await redisManager.trackUserActivity(userId, {
+      action: 'review_reasoning',
+      reasoningChainId: reasoningChain._id,
+      rating,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Review added successfully',
+      data: reasoningChain.reviews[reasoningChain.reviews.length - 1],
+    });
+  })
+);
+
+export default router;
