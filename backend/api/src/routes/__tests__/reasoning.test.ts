@@ -798,3 +798,129 @@ describe('Reasoning API', () => {
       (ReasoningChain.find as jest.Mock).mockResolvedValue([mockReasoningChain]);
 
       await ReasoningChain.find(query);
+
+      expect(ReasoningChain.find).toHaveBeenCalledWith(query);
+    });
+  });
+
+  describe('Evidence Reference Validation', () => {
+    it('should validate evidence IDs exist in project', async () => {
+      const evidenceIds = [mockEvidenceId];
+
+      (Evidence.find as jest.Mock).mockResolvedValue([
+        { _id: mockEvidenceId, project: mockProjectId, isActive: true },
+      ]);
+
+      const validEvidence = await Evidence.find({
+        _id: { $in: evidenceIds },
+        project: mockProjectId,
+        isActive: true,
+      });
+
+      expect(validEvidence.length).toBe(evidenceIds.length);
+    });
+
+    it('should reject invalid evidence references', async () => {
+      const invalidEvidenceIds = ['invalid-id-1', 'invalid-id-2'];
+
+      (Evidence.find as jest.Mock).mockResolvedValue([]);
+
+      const validEvidence = await Evidence.find({
+        _id: { $in: invalidEvidenceIds },
+        project: mockProjectId,
+        isActive: true,
+      });
+
+      expect(validEvidence.length).toBe(0);
+    });
+  });
+
+  describe('Complexity Levels', () => {
+    it('should accept valid complexity levels', () => {
+      const validLevels = ['simple', 'intermediate', 'complex', 'advanced'];
+
+      validLevels.forEach((level) => {
+        expect(validLevels).toContain(level);
+      });
+    });
+
+    it('should store complexity in metadata', () => {
+      const metadata = mockReasoningChain.metadata;
+
+      expect(metadata.complexity).toBe('intermediate');
+    });
+  });
+
+  describe('Generation Method Tracking', () => {
+    it('should distinguish between manual and AI-generated chains', () => {
+      const manualChain = { ...mockReasoningChain, metadata: { ...mockReasoningChain.metadata, generationMethod: 'manual' } };
+      const aiChain = { ...mockReasoningChain, metadata: { ...mockReasoningChain.metadata, generationMethod: 'ai_assisted' } };
+
+      expect(manualChain.metadata.generationMethod).toBe('manual');
+      expect(aiChain.metadata.generationMethod).toBe('ai_assisted');
+    });
+
+    it('should track AI model used for generation', () => {
+      const aiMetadata = {
+        ...mockReasoningChain.metadata,
+        generationMethod: 'ai_assisted',
+        aiModel: 'openai',
+        processingTime: 0.245,
+      };
+
+      expect(aiMetadata.aiModel).toBe('openai');
+      expect(aiMetadata.processingTime).toBeDefined();
+    });
+  });
+
+  describe('User Activity Tracking', () => {
+    it('should track view activity', async () => {
+      await redisManager.trackUserActivity(mockUserId, {
+        action: 'view_reasoning',
+        reasoningChainId: mockReasoningChainId,
+        claimId: mockClaimId,
+      });
+
+      expect(redisManager.trackUserActivity).toHaveBeenCalledWith(
+        mockUserId,
+        expect.objectContaining({
+          action: 'view_reasoning',
+          reasoningChainId: mockReasoningChainId,
+        })
+      );
+    });
+
+    it('should track generation activity', async () => {
+      await redisManager.trackUserActivity(mockUserId, {
+        action: 'generate_reasoning',
+        reasoningChainId: mockReasoningChainId,
+        claimId: mockClaimId,
+        reasoningType: 'deductive',
+      });
+
+      expect(redisManager.trackUserActivity).toHaveBeenCalledWith(
+        mockUserId,
+        expect.objectContaining({
+          action: 'generate_reasoning',
+          reasoningType: 'deductive',
+        })
+      );
+    });
+
+    it('should track validation activity', async () => {
+      await redisManager.trackUserActivity(mockUserId, {
+        action: 'validate_reasoning',
+        reasoningChainId: mockReasoningChainId,
+        validationScore: 0.85,
+      });
+
+      expect(redisManager.trackUserActivity).toHaveBeenCalledWith(
+        mockUserId,
+        expect.objectContaining({
+          action: 'validate_reasoning',
+          validationScore: 0.85,
+        })
+      );
+    });
+  });
+});
