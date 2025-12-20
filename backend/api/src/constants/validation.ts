@@ -131,3 +131,33 @@ export const REASONING_STEP_TYPES = [
   'assumption',
   'observation',
 ] as const;
+
+export const REASONING_STATUSES = [
+  'draft',
+  'review',
+  'validated',
+  'published',
+  'archived',
+] as const;
+
+export const REASONING_COMPLEXITY_LEVELS = [
+  'simple',
+  'intermediate',
+  'complex',
+  'advanced',
+] as const;
+
+export const REASONING_ERROR_MESSAGES = {
+  NOT_FOUND: 'Reasoning chain not found',
+  ACCESS_DENIED: 'Access denied to this reasoning chain',
+  PROJECT_MISMATCH: 'Reasoning chain does not belong to the specified project',
+  CLAIM_NOT_FOUND: 'Associated claim not found',
+  INVALID_STEPS: 'Invalid or insufficient reasoning steps provided',
+  ML_SERVICE_UNAVAILABLE: 'ML service is currently unavailable',
+  ML_REQUEST_FAILED: 'ML service request failed',
+  ML_RATE_LIMITED: 'ML service rate limit exceeded',
+  CANNOT_MODIFY_ARCHIVED: 'Cannot modify archived reasoning chain',
+  CANNOT_MODIFY_PUBLISHED: 'Cannot modify published reasoning chain',
+  MAX_STEPS_EXCEEDED: 'Maximum number of reasoning steps exceeded',
+  VALIDATION_FAILED: 'Reasoning validation failed',
+} as const;
