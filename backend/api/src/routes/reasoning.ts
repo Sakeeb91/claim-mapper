@@ -163,3 +163,195 @@ async function checkEditPermission(
 }
 
 // ============================================================================
+// SPECIFIC ROUTES (must come before parameterized routes)
+// ============================================================================
+
+/**
+ * POST /api/reasoning/generate - Generate reasoning chain using ML service
+ *
+ * This endpoint uses the ML service to generate a complete reasoning chain
+ * for a given claim. It leverages LLM capabilities for advanced reasoning.
+ *
+ * Body:
+ * - claimId: ID of the claim to generate reasoning for (required)
+ * - reasoningType: Type of reasoning (deductive, inductive, etc.) (required)
+ * - premises: Optional array of premise statements
+ * - conclusion: Optional conclusion statement
+ * - complexity: simple | intermediate | complex | advanced
+ * - maxSteps: Maximum number of reasoning steps (2-20)
+ * - useLLM: Whether to use LLM for generation (default true)
+ * - llmProvider: openai | anthropic (default openai)
+ */
+router.post('/generate',
+  authenticate,
+  sanitize,
+  validate(validationSchemas.generateReasoningChain),
+  asyncHandler(async (req: Request, res: Response) => {
+    const {
+      claimId,
+      reasoningType,
+      premises,
+      conclusion,
+      complexity = 'intermediate',
+      maxSteps = 10,
+      useLLM = true,
+      llmProvider = 'openai',
+    } = req.body;
+
+    // Find and validate claim
+    const claim = await Claim.findOne({ _id: claimId, isActive: true })
+      .populate('project', 'owner collaborators visibility settings');
+
+    if (!claim) {
+      throw createError(REASONING_ERROR_MESSAGES.CLAIM_NOT_FOUND, 404, 'CLAIM_NOT_FOUND');
+    }
+
+    // Check project access
+    const project = claim.project as any;
+    const userId = req.user!._id.toString();
+    const hasAccess = project.visibility === 'public' ||
+      project.owner.toString() === userId ||
+      project.collaborators.some((c: any) => c.user.toString() === userId);
+
+    if (!hasAccess) {
+      throw createError(REASONING_ERROR_MESSAGES.ACCESS_DENIED, 403, 'ACCESS_DENIED');
+    }
+
+    // Get related evidence for context
+    const evidence = await Evidence.find({
+      claims: claimId,
+      isActive: true,
+    }).select('text type reliability.score').limit(10);
+
+    const evidenceTexts = evidence.map((e) => e.text);
+
+    // Check cache for similar request
+    const cacheKey = `reasoning:generate:${claimId}:${reasoningType}:${complexity}`;
+    const cachedResult = await redisManager.get(cacheKey);
+    if (cachedResult) {
+      logger.debug('Reasoning generation served from cache', { cacheKey });
+      return res.json({
+        success: true,
+        data: cachedResult,
+        cached: true,
+      });
+    }
+
+    // Call ML service to generate reasoning
+    const mlResponse = await callMLService<any>('/reasoning/generate', {
+      claim: claim.text,
+      evidence: evidenceTexts,
+      reasoning_type: reasoningType,
+      complexity,
+      max_steps: maxSteps,
+      use_llm: useLLM,
+      llm_provider: llmProvider,
+      premises: premises || [],
+      conclusion: conclusion || '',
+    });
+
+    // Transform ML response to our schema format
+    const reasoningSteps = (mlResponse.reasoning_chains?.[0]?.steps || []).map(
+      (step: any, index: number) => ({
+        stepNumber: step.step_number || index + 1,
+        text: step.text,
+        type: step.type || 'inference',
+        confidence: step.confidence || 0.8,
+        evidence: [],
+        metadata: {
+          generatedBy: 'ai',
+          sourceModel: llmProvider,
+          timestamp: new Date(),
+        },
+      })
+    );
+
+    // Create reasoning chain in database
+    const reasoningChain = new ReasoningChain({
+      claim: claimId,
+      type: reasoningType,
+      steps: reasoningSteps.length >= 2 ? reasoningSteps : [
+        {
+          stepNumber: 1,
+          text: premises?.[0] || `Premise: ${claim.text}`,
+          type: 'premise',
+          confidence: 0.8,
+          evidence: [],
+          metadata: { generatedBy: 'ai', sourceModel: llmProvider, timestamp: new Date() },
+        },
+        {
+          stepNumber: 2,
+          text: conclusion || `Conclusion based on ${reasoningType} reasoning`,
+          type: 'conclusion',
+          confidence: 0.7,
+          evidence: [],
+          metadata: { generatedBy: 'ai', sourceModel: llmProvider, timestamp: new Date() },
+        },
+      ],
+      validity: {
+        logicalValidity: mlResponse.reasoning_chains?.[0]?.logical_validity || 0.7,
+        soundness: mlResponse.reasoning_chains?.[0]?.overall_confidence || 0.7,
+        completeness: 0.7,
+        coherence: 0.7,
+      },
+      analysis: {
+        fallacies: mlResponse.fallacies || [],
+        gaps: mlResponse.logical_gaps || [],
+        strengths: [],
+        counterarguments: [],
+      },
+      project: project._id,
+      creator: req.user!._id,
+      metadata: {
+        generationMethod: 'ai_assisted',
+        aiModel: llmProvider,
+        processingTime: mlResponse.processing_time,
+        complexity,
+        language: 'en',
+        wordCount: 0,
+      },
+      status: 'draft',
+    });
+
+    await reasoningChain.save();
+
+    // Populate for response
+    await reasoningChain.populate([
+      { path: 'claim', select: 'text type confidence' },
+      { path: 'creator', select: 'firstName lastName email' },
+      { path: 'project', select: 'name' },
+    ]);
+
+    // Cache the result
+    await redisManager.set(cacheKey, reasoningChain, VALIDATION_LIMITS.REASONING_CACHE_TTL);
+
+    // Clear related caches
+    await redisManager.deletePattern(`reasoning:list:*`);
+    await redisManager.deletePattern(`reasoning:claim:${claimId}:*`);
+
+    // Track activity
+    await redisManager.trackUserActivity(userId, {
+      action: 'generate_reasoning',
+      reasoningChainId: reasoningChain._id,
+      claimId,
+      reasoningType,
+    });
+
+    logger.info(`Reasoning chain generated: ${reasoningChain._id} by ${req.user!.email}`, {
+      claimId,
+      reasoningType,
+      stepCount: reasoningChain.steps.length,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Reasoning chain generated successfully',
+      data: reasoningChain,
+      mlAnalysis: {
+        fallacies: mlResponse.fallacies,
+        gaps: mlResponse.logical_gaps,
+        confidence: mlResponse.reasoning_chains?.[0]?.overall_confidence,
+      },
+    });
+  })
+);
