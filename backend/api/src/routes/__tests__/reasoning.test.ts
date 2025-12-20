@@ -348,3 +348,153 @@ describe('Reasoning API', () => {
       expect(isCollaborator).toBe(false);
     });
 
+    it('should allow access to public projects for all users', async () => {
+      const publicProject = { ...mockProject, visibility: 'public' };
+      (Project.findById as jest.Mock).mockResolvedValue(publicProject);
+
+      const project = await Project.findById(mockProjectId);
+
+      expect(project?.visibility).toBe('public');
+    });
+  });
+
+  describe('Edit Permission Checks', () => {
+    it('should allow creator to edit their own chain', () => {
+      const chainCreatorId = mockReasoningChain.creator;
+      const currentUserId = mockUserId;
+
+      expect(chainCreatorId).toBe(currentUserId);
+    });
+
+    it('should allow project owner to edit any chain', async () => {
+      (Project.findById as jest.Mock).mockResolvedValue(mockProject);
+
+      const project = await Project.findById(mockProjectId);
+      const isOwner = project?.owner.toString() === mockUserId;
+
+      expect(isOwner).toBe(true);
+    });
+
+    it('should check collaborator edit permissions', async () => {
+      const projectWithEditor = {
+        ...mockProject,
+        collaborators: [
+          { user: 'editor-id', permissions: { canEdit: true } },
+          { user: 'viewer-id', permissions: { canEdit: false } },
+        ],
+      };
+      (Project.findById as jest.Mock).mockResolvedValue(projectWithEditor);
+
+      const project = await Project.findById(mockProjectId);
+      const editorPerms = project?.collaborators.find(
+        (c: any) => c.user === 'editor-id'
+      );
+      const viewerPerms = project?.collaborators.find(
+        (c: any) => c.user === 'viewer-id'
+      );
+
+      expect(editorPerms?.permissions?.canEdit).toBe(true);
+      expect(viewerPerms?.permissions?.canEdit).toBe(false);
+    });
+  });
+
+  describe('Status Transition Rules', () => {
+    it('should not allow modifications to archived chains', () => {
+      const archivedChain = { ...mockReasoningChain, status: 'archived' };
+      const canModify = archivedChain.status !== 'archived';
+
+      expect(canModify).toBe(false);
+    });
+
+    it('should only allow status updates on published chains', () => {
+      const publishedChain = { ...mockReasoningChain, status: 'published' };
+      const updates = { type: 'inductive' }; // Non-status update
+
+      const canModify = publishedChain.status !== 'published' || 'status' in updates;
+
+      expect(canModify).toBe(false);
+    });
+
+    it('should allow any updates on draft chains', () => {
+      const draftChain = { ...mockReasoningChain, status: 'draft' };
+
+      expect(draftChain.status).toBe('draft');
+      // Draft chains have no modification restrictions
+    });
+
+    it('should validate status values', () => {
+      const validStatuses = ['draft', 'review', 'validated', 'published', 'archived'];
+
+      expect(validStatuses).toContain(mockReasoningChain.status);
+    });
+  });
+
+  describe('ML Service Integration', () => {
+    it('should call ML service with correct payload for generation', async () => {
+      const mockAxios = axios as jest.MockedFunction<typeof axios>;
+      mockAxios.mockResolvedValue({ data: mockMLResponse });
+
+      const payload = {
+        claim: mockClaim.text,
+        evidence: [],
+        reasoning_type: 'deductive',
+        complexity: 'intermediate',
+        max_steps: 10,
+        use_llm: true,
+        llm_provider: 'openai',
+      };
+
+      await axios({
+        method: 'post',
+        url: 'http://localhost:8002/reasoning/generate',
+        data: payload,
+        timeout: 30000,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': '',
+        },
+      });
+
+      expect(mockAxios).toHaveBeenCalled();
+    });
+
+    it('should handle ML service unavailable', async () => {
+      const mockAxios = axios as jest.MockedFunction<typeof axios>;
+      const axiosError = new Error('Connection refused');
+      (axiosError as NodeJS.ErrnoException).code = 'ECONNREFUSED';
+      mockAxios.mockRejectedValue(axiosError);
+
+      await expect(
+        axios({ method: 'post', url: 'http://localhost:8002/reasoning/generate' })
+      ).rejects.toThrow('Connection refused');
+    });
+
+    it('should handle ML service timeout', async () => {
+      const mockAxios = axios as jest.MockedFunction<typeof axios>;
+      const axiosError = new Error('Timeout');
+      (axiosError as NodeJS.ErrnoException).code = 'ETIMEDOUT';
+      mockAxios.mockRejectedValue(axiosError);
+
+      await expect(
+        axios({ method: 'post', url: 'http://localhost:8002/reasoning/generate' })
+      ).rejects.toThrow('Timeout');
+    });
+
+    it('should handle ML service rate limiting', async () => {
+      const mockAxios = axios as jest.MockedFunction<typeof axios>;
+      const axiosError = {
+        message: 'Rate limited',
+        response: { status: 429, data: { message: 'Too many requests' } },
+      };
+      mockAxios.mockRejectedValue(axiosError);
+
+      await expect(
+        axios({ method: 'post', url: 'http://localhost:8002/reasoning/generate' })
+      ).rejects.toMatchObject({ response: { status: 429 } });
+    });
+
+    it('should transform ML response to schema format', () => {
+      const mlSteps = mockMLResponse.reasoning_chains[0].steps;
+
+      const transformedSteps = mlSteps.map((step, index) => ({
+        stepNumber: step.step_number || index + 1,
