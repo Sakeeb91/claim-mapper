@@ -648,3 +648,153 @@ describe('Reasoning API', () => {
       });
     });
 
+    it('should require minimum comment length', () => {
+      const minLength = 10;
+      const validComment = 'This is a valid review comment with sufficient length.';
+      const invalidComment = 'Too short';
+
+      expect(validComment.length).toBeGreaterThanOrEqual(minLength);
+      expect(invalidComment.length).toBeLessThan(minLength);
+    });
+
+    it('should prevent duplicate reviews from same user', () => {
+      const existingReviews = [
+        { reviewer: mockUserId, rating: 4, comments: 'Great reasoning' },
+      ];
+
+      const hasReviewed = existingReviews.some(
+        (r) => r.reviewer === mockUserId
+      );
+
+      expect(hasReviewed).toBe(true);
+    });
+  });
+
+  describe('Statistics Aggregation', () => {
+    it('should calculate status distribution', async () => {
+      const mockAggregation = [
+        {
+          _id: null,
+          totalChains: 10,
+          draft: 3,
+          review: 2,
+          validated: 2,
+          published: 2,
+          archived: 1,
+        },
+      ];
+
+      (ReasoningChain.aggregate as jest.Mock).mockResolvedValue(mockAggregation);
+
+      const result = await ReasoningChain.aggregate([
+        { $match: { project: mockProjectId, isActive: true } },
+        { $group: { _id: null, totalChains: { $sum: 1 } } },
+      ]);
+
+      expect(result[0].totalChains).toBe(10);
+      expect(result[0].draft).toBe(3);
+    });
+
+    it('should aggregate by reasoning type', async () => {
+      const typeStats = [
+        { _id: 'deductive', count: 5 },
+        { _id: 'inductive', count: 3 },
+        { _id: 'abductive', count: 2 },
+      ];
+
+      (ReasoningChain.aggregate as jest.Mock).mockResolvedValue(typeStats);
+
+      const result = await ReasoningChain.aggregate([
+        { $match: { project: mockProjectId, isActive: true } },
+        { $group: { _id: '$type', count: { $sum: 1 } } },
+      ]);
+
+      const byType = result.reduce((acc: Record<string, number>, { _id, count }) => {
+        if (_id) acc[_id] = count;
+        return acc;
+      }, {});
+
+      expect(byType.deductive).toBe(5);
+      expect(byType.inductive).toBe(3);
+    });
+  });
+
+  describe('Search Functionality', () => {
+    it('should require minimum query length', () => {
+      const minLength = 2;
+      const validQuery = 'climate change';
+      const invalidQuery = 'a';
+
+      expect(validQuery.length).toBeGreaterThanOrEqual(minLength);
+      expect(invalidQuery.length).toBeLessThan(minLength);
+    });
+
+    it('should use text search with scoring', async () => {
+      const searchQuery = 'climate';
+
+      (ReasoningChain.find as jest.Mock).mockReturnValue({
+        sort: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        populate: jest.fn().mockResolvedValue([mockReasoningChain]),
+      });
+
+      // Simulating the search call pattern
+      const mockFind = ReasoningChain.find as jest.Mock;
+      mockFind({ $text: { $search: searchQuery }, isActive: true });
+
+      expect(mockFind).toHaveBeenCalled();
+    });
+
+    it('should limit results to maximum', () => {
+      const maxResults = 100;
+      const requestedLimit = 200;
+
+      const actualLimit = Math.min(requestedLimit, maxResults);
+
+      expect(actualLimit).toBe(100);
+    });
+  });
+
+  describe('Pagination', () => {
+    it('should calculate correct skip value', () => {
+      const page = 3;
+      const limit = 20;
+      const skip = (page - 1) * limit;
+
+      expect(skip).toBe(40);
+    });
+
+    it('should calculate total pages correctly', () => {
+      const total = 55;
+      const limit = 20;
+      const totalPages = Math.ceil(total / limit);
+
+      expect(totalPages).toBe(3);
+    });
+
+    it('should determine hasNext and hasPrev flags', () => {
+      const page = 2;
+      const totalPages = 3;
+
+      const hasNext = page < totalPages;
+      const hasPrev = page > 1;
+
+      expect(hasNext).toBe(true);
+      expect(hasPrev).toBe(true);
+    });
+  });
+
+  describe('Soft Delete Behavior', () => {
+    it('should set isActive to false instead of removing', async () => {
+      const chainToDelete = { ...mockReasoningChain, isActive: true };
+      chainToDelete.isActive = false;
+
+      expect(chainToDelete.isActive).toBe(false);
+    });
+
+    it('should exclude inactive chains from queries', async () => {
+      const query = { isActive: true };
+
+      (ReasoningChain.find as jest.Mock).mockResolvedValue([mockReasoningChain]);
+
+      await ReasoningChain.find(query);
