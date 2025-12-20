@@ -114,3 +114,20 @@ export const ALLOWED_MIME_TYPES = [
   'application/vnd.ms-excel',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 ] as const;
+
+export const REASONING_TYPES = [
+  'deductive',
+  'inductive',
+  'abductive',
+  'analogical',
+  'causal',
+  'statistical',
+] as const;
+
+export const REASONING_STEP_TYPES = [
+  'premise',
+  'inference',
+  'conclusion',
+  'assumption',
+  'observation',
+] as const;
