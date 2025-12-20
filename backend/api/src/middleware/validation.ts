@@ -299,6 +299,32 @@ export const validationSchemas = {
     status: Joi.string().valid('draft', 'review', 'validated', 'published', 'archived'),
   }),
 
+  // Generate reasoning chain with ML
+  generateReasoningChain: Joi.object({
+    claimId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).required(),
+    reasoningType: Joi.string().valid('deductive', 'inductive', 'abductive', 'analogical', 'causal', 'statistical').required(),
+    premises: Joi.array().items(Joi.string().min(10).max(1000)).max(10),
+    conclusion: Joi.string().min(10).max(1000),
+    complexity: Joi.string().valid('simple', 'intermediate', 'complex', 'advanced').default('intermediate'),
+    maxSteps: Joi.number().integer().min(2).max(20).default(10),
+    useLLM: Joi.boolean().default(true),
+    llmProvider: Joi.string().valid('openai', 'anthropic').default('openai'),
+  }),
+
+  // Validate reasoning steps
+  validateReasoningSteps: Joi.object({
+    reasoningSteps: Joi.array().items(Joi.string().min(10).max(1000)).min(2).max(20).required(),
+    reasoningType: Joi.string().valid('deductive', 'inductive', 'abductive', 'analogical', 'causal', 'statistical').required(),
+    evidence: Joi.array().items(Joi.string().min(10).max(2000)).max(10),
+  }),
+
+  // Detect fallacies request
+  detectFallaciesRequest: Joi.object({
+    includeFallacies: Joi.boolean().default(true),
+    includeGaps: Joi.boolean().default(true),
+    includeCounterarguments: Joi.boolean().default(false),
+  }),
+
   // Search and filter validation
   searchQuery: Joi.object({
     q: Joi.string().min(1).max(500),
