@@ -731,3 +731,167 @@ router.get('/',
     });
   })
 );
+
+/**
+ * GET /api/reasoning/:id - Get single reasoning chain by ID
+ */
+router.get('/:id',
+  authenticate,
+  validate(validationSchemas.objectId, 'params'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+
+    // Check cache first
+    const cacheKey = `reasoning:${id}:${req.user!._id.toString()}`;
+    const cachedResult = await redisManager.get(cacheKey);
+    if (cachedResult) {
+      return res.json({
+        success: true,
+        data: cachedResult,
+        cached: true,
+      });
+    }
+
+    const reasoningChain = await ReasoningChain.findOne({ _id: id, isActive: true })
+      .populate('claim', 'text type confidence status')
+      .populate('creator', 'firstName lastName email')
+      .populate('project', 'name visibility owner collaborators')
+      .populate('steps.evidence', 'text type reliability.score')
+      .populate('collaborators.user', 'firstName lastName email')
+      .populate('reviews.reviewer', 'firstName lastName email')
+      .populate('validity.assessedBy', 'firstName lastName email');
+
+    if (!reasoningChain) {
+      throw createError(REASONING_ERROR_MESSAGES.NOT_FOUND, 404, 'REASONING_NOT_FOUND');
+    }
+
+    // Check project access
+    const project = reasoningChain.project as any;
+    const userId = req.user!._id.toString();
+    const hasAccess = project.visibility === 'public' ||
+      project.owner.toString() === userId ||
+      project.collaborators.some((c: any) => c.user.toString() === userId);
+
+    if (!hasAccess) {
+      throw createError(REASONING_ERROR_MESSAGES.ACCESS_DENIED, 403, 'REASONING_ACCESS_DENIED');
+    }
+
+    // Cache result
+    await redisManager.set(cacheKey, reasoningChain, VALIDATION_LIMITS.REASONING_CACHE_TTL);
+
+    // Track view activity
+    await redisManager.trackUserActivity(userId, {
+      action: 'view_reasoning',
+      reasoningChainId: reasoningChain._id,
+      claimId: reasoningChain.claim,
+    });
+
+    res.json({
+      success: true,
+      data: reasoningChain,
+    });
+  })
+);
+
+/**
+ * POST /api/reasoning - Create new reasoning chain manually
+ */
+router.post('/',
+  authenticate,
+  sanitize,
+  validate(validationSchemas.createReasoningChain),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { claimId, type, steps, tags } = req.body;
+
+    // Validate claim exists
+    const claim = await Claim.findOne({ _id: claimId, isActive: true })
+      .populate('project', 'owner collaborators visibility');
+
+    if (!claim) {
+      throw createError(REASONING_ERROR_MESSAGES.CLAIM_NOT_FOUND, 404, 'CLAIM_NOT_FOUND');
+    }
+
+    // Check project access
+    const project = claim.project as any;
+    const userId = req.user!._id.toString();
+    const hasAccess = await checkEditPermission(project._id.toString(), userId);
+
+    if (!hasAccess) {
+      throw createError(REASONING_ERROR_MESSAGES.ACCESS_DENIED, 403, 'PROJECT_EDIT_DENIED');
+    }
+
+    // Validate evidence references in steps
+    const evidenceIds = steps.flatMap((step: any) => step.evidence || []);
+    if (evidenceIds.length > 0) {
+      const validEvidence = await Evidence.find({
+        _id: { $in: evidenceIds },
+        project: project._id,
+        isActive: true,
+      });
+
+      if (validEvidence.length !== evidenceIds.length) {
+        throw createError('One or more evidence references not found', 404, 'EVIDENCE_NOT_FOUND');
+      }
+    }
+
+    // Create reasoning chain
+    const reasoningChain = new ReasoningChain({
+      claim: claimId,
+      type,
+      steps: steps.map((step: any, index: number) => ({
+        ...step,
+        stepNumber: step.stepNumber || index + 1,
+        validation: {
+          isValid: true,
+          issues: [],
+          suggestions: [],
+        },
+        metadata: {
+          generatedBy: 'human',
+          timestamp: new Date(),
+        },
+      })),
+      project: project._id,
+      creator: req.user!._id,
+      tags: tags || [],
+      metadata: {
+        generationMethod: 'manual',
+        complexity: 'intermediate',
+        language: 'en',
+        wordCount: 0,
+      },
+      status: 'draft',
+    });
+
+    await reasoningChain.save();
+
+    // Populate for response
+    await reasoningChain.populate([
+      { path: 'claim', select: 'text type confidence' },
+      { path: 'creator', select: 'firstName lastName email' },
+      { path: 'project', select: 'name' },
+    ]);
+
+    // Clear related caches
+    await redisManager.deletePattern('reasoning:*');
+
+    // Track activity
+    await redisManager.trackUserActivity(userId, {
+      action: 'create_reasoning',
+      reasoningChainId: reasoningChain._id,
+      claimId,
+    });
+
+    logger.info(`Reasoning chain created: ${reasoningChain._id} by ${req.user!.email}`, {
+      claimId,
+      type,
+      stepCount: steps.length,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Reasoning chain created successfully',
+      data: reasoningChain,
+    });
+  })
+);
