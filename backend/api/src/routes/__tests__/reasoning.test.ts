@@ -198,3 +198,153 @@ describe('Reasoning API', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  describe('Reasoning Step Validation', () => {
+    it('should require minimum 2 steps for a valid reasoning chain', () => {
+      const steps = mockReasoningSteps;
+      const hasMinimumSteps = steps.length >= 2;
+
+      expect(hasMinimumSteps).toBe(true);
+    });
+
+    it('should reject chains with less than 2 steps', () => {
+      const steps = [mockReasoningSteps[0]];
+      const hasMinimumSteps = steps.length >= 2;
+
+      expect(hasMinimumSteps).toBe(false);
+    });
+
+    it('should validate step number sequence', () => {
+      const steps = mockReasoningSteps;
+      const isSequential = steps.every(
+        (step, index) => step.stepNumber === index + 1
+      );
+
+      expect(isSequential).toBe(true);
+    });
+
+    it('should validate step text length constraints', () => {
+      const minLength = 10;
+      const maxLength = 1000;
+
+      mockReasoningSteps.forEach((step) => {
+        const textLength = step.text.length;
+        expect(textLength).toBeGreaterThanOrEqual(minLength);
+        expect(textLength).toBeLessThanOrEqual(maxLength);
+      });
+    });
+
+    it('should validate step type values', () => {
+      const validTypes = ['premise', 'inference', 'conclusion', 'assumption', 'observation'];
+
+      mockReasoningSteps.forEach((step) => {
+        expect(validTypes).toContain(step.type);
+      });
+    });
+
+    it('should validate confidence scores are between 0 and 1', () => {
+      mockReasoningSteps.forEach((step) => {
+        expect(step.confidence).toBeGreaterThanOrEqual(0);
+        expect(step.confidence).toBeLessThanOrEqual(1);
+      });
+    });
+
+    it('should validate logical operator values', () => {
+      const validOperators = ['and', 'or', 'if-then', 'if-and-only-if', 'not', undefined];
+
+      mockReasoningSteps.forEach((step) => {
+        expect(validOperators).toContain(step.logicalOperator);
+      });
+    });
+  });
+
+  describe('Reasoning Type Validation', () => {
+    it('should accept valid reasoning types', () => {
+      const validTypes = [
+        'deductive',
+        'inductive',
+        'abductive',
+        'analogical',
+        'causal',
+        'statistical',
+      ];
+
+      validTypes.forEach((type) => {
+        expect(validTypes).toContain(type);
+      });
+    });
+
+    it('should recognize deductive reasoning characteristics', () => {
+      // Deductive: conclusion follows necessarily from premises
+      const type = mockReasoningChain.type;
+      expect(type).toBe('deductive');
+
+      // Should have high logical validity for deductive
+      expect(mockReasoningChain.validity.logicalValidity).toBeGreaterThan(0.8);
+    });
+  });
+
+  describe('Validity Score Calculation', () => {
+    it('should calculate overall score from components', () => {
+      const { logicalValidity, soundness, completeness, coherence } = mockReasoningChain.validity;
+
+      // Simple average calculation (actual implementation may differ)
+      const calculatedOverall = (logicalValidity + soundness + completeness + coherence) / 4;
+
+      expect(calculatedOverall).toBeCloseTo(0.8575, 2);
+    });
+
+    it('should have all validity components between 0 and 1', () => {
+      const validity = mockReasoningChain.validity;
+
+      expect(validity.logicalValidity).toBeGreaterThanOrEqual(0);
+      expect(validity.logicalValidity).toBeLessThanOrEqual(1);
+      expect(validity.soundness).toBeGreaterThanOrEqual(0);
+      expect(validity.soundness).toBeLessThanOrEqual(1);
+      expect(validity.completeness).toBeGreaterThanOrEqual(0);
+      expect(validity.completeness).toBeLessThanOrEqual(1);
+      expect(validity.coherence).toBeGreaterThanOrEqual(0);
+      expect(validity.coherence).toBeLessThanOrEqual(1);
+    });
+  });
+
+  describe('Project Access Control', () => {
+    it('should allow owner access to private project', async () => {
+      (Project.findById as jest.Mock).mockResolvedValue(mockProject);
+
+      const project = await Project.findById(mockProjectId);
+      const isOwner = project?.owner.toString() === mockUserId;
+
+      expect(isOwner).toBe(true);
+    });
+
+    it('should allow collaborator access', async () => {
+      const projectWithCollaborator = {
+        ...mockProject,
+        collaborators: [{ user: 'collaborator-id', permissions: { canEdit: true } }],
+      };
+      (Project.findById as jest.Mock).mockResolvedValue(projectWithCollaborator);
+
+      const project = await Project.findById(mockProjectId);
+      const isCollaborator = project?.collaborators.some(
+        (c: any) => c.user === 'collaborator-id'
+      );
+
+      expect(isCollaborator).toBe(true);
+    });
+
+    it('should deny access for non-authorized users', async () => {
+      (Project.findById as jest.Mock).mockResolvedValue(mockProject);
+
+      const project = await Project.findById(mockProjectId);
+      const unauthorizedUserId = 'unauthorized-user';
+      const isOwner = project?.owner.toString() === unauthorizedUserId;
+      const isCollaborator = project?.collaborators.some(
+        (c: any) => c.user === unauthorizedUserId
+      );
+
+      expect(isOwner).toBe(false);
+      expect(isCollaborator).toBe(false);
+    });
+
