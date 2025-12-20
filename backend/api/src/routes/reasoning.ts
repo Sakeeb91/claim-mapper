@@ -355,3 +355,171 @@ router.post('/generate',
     });
   })
 );
+
+/**
+ * GET /api/reasoning/project/:projectId/stats - Get reasoning statistics for a project
+ */
+router.get('/project/:projectId/stats',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { projectId } = req.params;
+
+    if (!/^[0-9a-fA-F]{24}$/.test(projectId)) {
+      throw createError('Invalid project ID format', 400, 'INVALID_PROJECT_ID');
+    }
+
+    const hasAccess = await checkProjectAccess(projectId, req.user!._id.toString());
+    if (!hasAccess) {
+      throw createError(REASONING_ERROR_MESSAGES.ACCESS_DENIED, 403, 'PROJECT_ACCESS_DENIED');
+    }
+
+    // Check cache
+    const cacheKey = `reasoning:stats:${projectId}`;
+    const cachedResult = await redisManager.get(cacheKey);
+    if (cachedResult) {
+      return res.json({
+        success: true,
+        data: cachedResult,
+        cached: true,
+      });
+    }
+
+    // Aggregate statistics
+    const projectObjectId = new mongoose.Types.ObjectId(projectId);
+    const stats = await ReasoningChain.aggregate([
+      { $match: { project: projectObjectId, isActive: true } },
+      {
+        $group: {
+          _id: null,
+          totalChains: { $sum: 1 },
+          avgValidity: { $avg: '$validity.overallScore' },
+          avgQuality: { $avg: '$quality.overallQuality' },
+          avgStepCount: { $avg: { $size: '$steps' } },
+          draft: { $sum: { $cond: [{ $eq: ['$status', 'draft'] }, 1, 0] } },
+          review: { $sum: { $cond: [{ $eq: ['$status', 'review'] }, 1, 0] } },
+          validated: { $sum: { $cond: [{ $eq: ['$status', 'validated'] }, 1, 0] } },
+          published: { $sum: { $cond: [{ $eq: ['$status', 'published'] }, 1, 0] } },
+          archived: { $sum: { $cond: [{ $eq: ['$status', 'archived'] }, 1, 0] } },
+          totalFallacies: { $sum: { $size: '$analysis.fallacies' } },
+          totalGaps: { $sum: { $size: '$analysis.gaps' } },
+        },
+      },
+    ]);
+
+    const typeStats = await ReasoningChain.aggregate([
+      { $match: { project: projectObjectId, isActive: true } },
+      { $group: { _id: '$type', count: { $sum: 1 } } },
+    ]);
+
+    const complexityStats = await ReasoningChain.aggregate([
+      { $match: { project: projectObjectId, isActive: true } },
+      { $group: { _id: '$metadata.complexity', count: { $sum: 1 } } },
+    ]);
+
+    const result = {
+      totalChains: stats[0]?.totalChains || 0,
+      averageValidity: stats[0]?.avgValidity || 0,
+      averageQuality: stats[0]?.avgQuality || 0,
+      averageStepCount: stats[0]?.avgStepCount || 0,
+      statusDistribution: {
+        draft: stats[0]?.draft || 0,
+        review: stats[0]?.review || 0,
+        validated: stats[0]?.validated || 0,
+        published: stats[0]?.published || 0,
+        archived: stats[0]?.archived || 0,
+      },
+      issuesFound: {
+        totalFallacies: stats[0]?.totalFallacies || 0,
+        totalGaps: stats[0]?.totalGaps || 0,
+      },
+      byType: typeStats.reduce((acc, { _id, count }) => {
+        if (_id) acc[_id] = count;
+        return acc;
+      }, {} as Record<string, number>),
+      byComplexity: complexityStats.reduce((acc, { _id, count }) => {
+        if (_id) acc[_id] = count;
+        return acc;
+      }, {} as Record<string, number>),
+    };
+
+    // Cache for 2 minutes
+    await redisManager.set(cacheKey, result, 120);
+
+    res.json({
+      success: true,
+      data: result,
+    });
+  })
+);
+
+/**
+ * GET /api/reasoning/search - Search reasoning chains by text
+ *
+ * Query params:
+ * - q: Search query (required)
+ * - projectId: Optional project filter
+ * - limit: Max results (default 20)
+ */
+router.get('/search',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { q, projectId, limit = 20 } = req.query;
+
+    if (!q || typeof q !== 'string' || q.trim().length < 2) {
+      throw createError(
+        'Search query must be at least 2 characters',
+        400,
+        'INVALID_SEARCH_QUERY'
+      );
+    }
+
+    const searchConditions: any = {
+      $text: { $search: q.trim() },
+      isActive: true,
+    };
+
+    if (projectId) {
+      const hasAccess = await checkProjectAccess(
+        projectId as string,
+        req.user!._id.toString()
+      );
+
+      if (!hasAccess) {
+        throw createError(REASONING_ERROR_MESSAGES.ACCESS_DENIED, 403, 'PROJECT_ACCESS_DENIED');
+      }
+
+      searchConditions.project = projectId;
+    } else {
+      const userProjects = await Project.find({
+        $or: [
+          { owner: req.user!._id },
+          { 'collaborators.user': req.user!._id },
+          { visibility: 'public' },
+        ],
+        isActive: true,
+      }).select('_id');
+
+      searchConditions.project = { $in: userProjects.map((p) => p._id) };
+    }
+
+    const reasoningChains = await ReasoningChain.find(
+      searchConditions,
+      { score: { $meta: 'textScore' } }
+    )
+      .sort({ score: { $meta: 'textScore' } })
+      .limit(Math.min(Number(limit), VALIDATION_LIMITS.SEARCH_MAX_RESULTS))
+      .populate('claim', 'text type')
+      .populate('creator', 'firstName lastName email')
+      .populate('project', 'name');
+
+    res.json({
+      success: true,
+      data: reasoningChains,
+      meta: {
+        query: q,
+        count: reasoningChains.length,
+        limit: Number(limit),
+      },
+    });
+  })
+);
