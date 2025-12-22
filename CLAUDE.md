@@ -166,20 +166,31 @@ src/
 ### Backend API Structure
 ```
 backend/api/src/
-├── constants/       # 🆕 Server constants
+├── config/          # Database and service configuration
+│   ├── database.ts  # MongoDB connection
+│   ├── redis.ts     # Redis connection manager
+│   └── vectordb.ts  # 🆕 Pinecone vector database config
+├── constants/       # Server constants
 │   ├── errors.ts    # Error messages and codes
 │   ├── status.ts    # HTTP and entity status codes
 │   └── validation.ts # Validation limits and patterns
-├── lib/             # 🆕 Business logic layer
+├── lib/             # Business logic layer
 │   ├── graph/       # analyzer.ts (graph metrics, central nodes)
-│   ├── reasoning/   # Reasoning chain builders (TODO)
-│   └── validation/  # Validation schemas (TODO)
+│   ├── reasoning/   # Reasoning chain builders
+│   └── validation/  # Validation schemas
 ├── middleware/      # Express middleware (auth, validation, etc.)
 ├── models/          # Mongoose schemas (Claim.ts, Evidence.ts, etc.)
 ├── routes/          # Express route handlers (claims.ts, graph.ts, etc.)
-├── config/          # Database and service configuration
+├── services/        # 🆕 Backend services
+│   ├── embedding.ts # OpenAI embedding generation
+│   ├── vectorStore.ts # Pinecone CRUD operations
+│   └── ingestion/   # Document ingestion pipeline
+│       ├── index.ts # Ingestion orchestrator
+│       └── chunker.ts # Text chunking service
 ├── utils/           # Server-side utilities
 ├── websocket/       # Socket.io WebSocket handlers
+├── scripts/         # 🆕 Utility scripts
+│   └── sync-vector-db.ts # Vector DB migration script
 └── server.ts        # Main Express application entry point
 ```
 
@@ -247,6 +258,7 @@ gh run view <run-id> --log-failed    # View failure logs
 - **Example file**: `.env.example` (copy to `.env.local` for local dev)
 - **API Keys**: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` for ML service LLM features
 - **Database**: `MONGODB_URI`, `REDIS_URL`, `JWT_SECRET`
+- **Vector DB** (optional): `PINECONE_API_KEY`, `PINECONE_INDEX_NAME`, `PINECONE_NAMESPACE`
 
 ## Key Architecture Files
 
@@ -296,6 +308,19 @@ The ML service includes sophisticated reasoning capabilities:
 - Filtering by type, confidence level, tags
 - Search integration with node highlighting
 - Performance consideration: virtualization needed for large datasets (>1000 nodes)
+
+### Vector Database & Semantic Search (NEW)
+The system includes optional vector database integration for semantic search:
+- **Pinecone Integration**: `backend/api/src/config/vectordb.ts` - managed vector DB for embeddings
+- **OpenAI Embeddings**: `backend/api/src/services/embedding.ts` - text-embedding-3-large (1536 dims)
+- **Vector Store**: `backend/api/src/services/vectorStore.ts` - CRUD operations and similarity search
+- **Auto-sync**: Evidence documents automatically sync to vector DB via Mongoose post-save hooks
+- **Endpoints**:
+  - `POST /api/evidence/search/semantic` - Semantic similarity search
+  - `POST /api/evidence/ingest` - Document ingestion with claim extraction
+  - `POST /api/evidence/ingest/url` - URL ingestion
+- **Migration Script**: `npm run sync:vectordb` - Sync existing evidence to vector DB
+- **Optional Feature**: System works without vector DB; semantic features gracefully degrade
 
 ## Documentation
 
