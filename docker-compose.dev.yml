@@ -33,6 +33,13 @@ services:
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=your-super-secret-jwt-key-change-in-production
       - FRONTEND_URL=http://localhost:3000
+      - ML_SERVICE_URL=http://ml-service:8002
+      # Vector Database (Pinecone) - optional, for semantic search
+      - PINECONE_API_KEY=${PINECONE_API_KEY:-}
+      - PINECONE_INDEX_NAME=${PINECONE_INDEX_NAME:-claim-mapper-evidence}
+      - PINECONE_NAMESPACE=${PINECONE_NAMESPACE:-evidence}
+      # OpenAI for embeddings - optional, for semantic search
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
     depends_on:
       - mongo
       - redis
