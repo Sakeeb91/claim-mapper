@@ -417,6 +417,352 @@ router.get('/search',
 );
 
 /**
+ * POST /api/evidence/search/semantic - Semantic similarity search
+ *
+ * Uses vector embeddings for semantic search across evidence.
+ * Requires PINECONE_API_KEY and OPENAI_API_KEY to be configured.
+ *
+ * Body:
+ * - query: Search query text (required)
+ * - projectId: Project to search within (required)
+ * - limit: Max results (default 10, max 50)
+ * - minScore: Minimum similarity score (default 0.5)
+ */
+router.post('/search/semantic',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { query, projectId, limit = 10, minScore = 0.5 } = req.body;
+
+    // Validate query
+    if (!query || typeof query !== 'string' || query.trim().length < 3) {
+      throw createError(
+        'Query must be at least 3 characters',
+        400,
+        'INVALID_QUERY'
+      );
+    }
+
+    // Validate project ID
+    if (!projectId || !mongoose.Types.ObjectId.isValid(projectId)) {
+      throw createError(
+        'Valid projectId is required for semantic search',
+        400,
+        'INVALID_PROJECT_ID'
+      );
+    }
+
+    // Check project access
+    const hasAccess = await checkProjectAccess(
+      projectId,
+      req.user!._id.toString()
+    );
+
+    if (!hasAccess) {
+      throw createError(
+        EVIDENCE_ERROR_MESSAGES.ACCESS_DENIED,
+        403,
+        'PROJECT_ACCESS_DENIED'
+      );
+    }
+
+    // Import vector search service dynamically
+    const { searchByProject } = await import('../services/vectorStore');
+    const { isVectorDbEnabled } = await import('../config/vectordb');
+
+    // Check if vector search is available
+    if (!isVectorDbEnabled()) {
+      throw createError(
+        'Semantic search is not available. Vector database is not configured.',
+        503,
+        'VECTOR_DB_NOT_CONFIGURED'
+      );
+    }
+
+    try {
+      // Perform semantic search
+      const results = await searchByProject(
+        query.trim(),
+        projectId,
+        {
+          topK: Math.min(Number(limit), 50),
+          minScore: Number(minScore),
+        }
+      );
+
+      // Fetch full evidence documents for matched IDs
+      const evidenceIds = results.map((r) => r.id);
+      const evidenceMap = new Map<string, any>();
+
+      if (evidenceIds.length > 0) {
+        const evidenceDocs = await Evidence.find({
+          _id: { $in: evidenceIds },
+          isActive: true,
+        })
+          .populate('addedBy', 'firstName lastName email')
+          .populate('project', 'name');
+
+        for (const doc of evidenceDocs) {
+          evidenceMap.set(doc._id.toString(), doc);
+        }
+      }
+
+      // Combine results with full evidence data
+      const enrichedResults = results
+        .map((result) => ({
+          evidence: evidenceMap.get(result.id) || null,
+          score: result.score,
+          metadata: result.metadata,
+        }))
+        .filter((r) => r.evidence !== null);
+
+      res.json({
+        success: true,
+        data: enrichedResults,
+        meta: {
+          query: query.trim(),
+          count: enrichedResults.length,
+          projectId,
+          searchType: 'semantic',
+        },
+      });
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      logger.error(`Semantic search failed: ${errorMsg}`);
+      throw createError(
+        `Semantic search failed: ${errorMsg}`,
+        500,
+        'SEMANTIC_SEARCH_FAILED'
+      );
+    }
+  })
+);
+
+/**
+ * POST /api/evidence/ingest - Ingest a document and extract evidence
+ *
+ * Processes a document through the ingestion pipeline:
+ * 1. Chunks the text into manageable pieces
+ * 2. Extracts claims from each chunk using the ML service
+ * 3. Creates Evidence documents for each claim
+ * 4. Syncs to vector database for semantic search
+ *
+ * Body:
+ * - text: Document text to ingest (required)
+ * - source: Source metadata object (required)
+ *   - title: Document title
+ *   - type: 'document' | 'url' | 'text' | 'pdf'
+ *   - url?: Source URL
+ *   - author?: Author name
+ *   - publication?: Publication name
+ *   - publishedDate?: Publication date
+ * - projectId: Project to add evidence to (required)
+ * - options?: Ingestion options
+ *   - confidenceThreshold: Min confidence (default 0.6)
+ *   - checkDuplicates: Skip duplicates (default true)
+ *   - maxChunks: Limit chunks processed (0 = unlimited)
+ */
+router.post('/ingest',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { text, source, projectId, options = {} } = req.body;
+
+    // Validate required fields
+    if (!text || typeof text !== 'string' || text.trim().length < 50) {
+      throw createError(
+        'Document text must be at least 50 characters',
+        400,
+        'INVALID_TEXT'
+      );
+    }
+
+    if (!source || !source.title) {
+      throw createError(
+        'Source information with title is required',
+        400,
+        'INVALID_SOURCE'
+      );
+    }
+
+    if (!projectId || !mongoose.Types.ObjectId.isValid(projectId)) {
+      throw createError(
+        'Valid projectId is required',
+        400,
+        'INVALID_PROJECT_ID'
+      );
+    }
+
+    // Check project access and edit permission
+    const hasAccess = await checkProjectAccess(
+      projectId,
+      req.user!._id.toString()
+    );
+
+    if (!hasAccess) {
+      throw createError(
+        EVIDENCE_ERROR_MESSAGES.ACCESS_DENIED,
+        403,
+        'PROJECT_ACCESS_DENIED'
+      );
+    }
+
+    const hasEditPermission = await checkEditPermission(
+      projectId,
+      req.user!._id.toString()
+    );
+
+    if (!hasEditPermission) {
+      throw createError(
+        'You do not have permission to add evidence to this project',
+        403,
+        'EDIT_PERMISSION_DENIED'
+      );
+    }
+
+    try {
+      // Import ingestion service dynamically
+      const { ingestDocument } = await import('../services/ingestion');
+
+      // Prepare source with defaults
+      const ingestionSource = {
+        title: source.title,
+        type: source.type || 'text',
+        url: source.url,
+        author: source.author,
+        publication: source.publication,
+        publishedDate: source.publishedDate ? new Date(source.publishedDate) : undefined,
+        accessedDate: new Date(),
+      };
+
+      // Run ingestion
+      const result = await ingestDocument(
+        text.trim(),
+        ingestionSource,
+        projectId,
+        req.user!._id.toString(),
+        options
+      );
+
+      // Clear caches
+      await redisManager.deletePattern('evidence:*');
+      await redisManager.deletePattern('graph:*');
+
+      // Track activity
+      await redisManager.trackUserActivity(req.user!._id.toString(), {
+        action: 'ingest_document',
+        projectId,
+        artifactId: result.artifactId,
+        evidenceCreated: result.evidenceCreated,
+      });
+
+      logger.info(`Document ingested: ${result.evidenceCreated} evidence created by ${req.user!.email}`);
+
+      res.status(201).json({
+        success: true,
+        message: `Ingested ${result.claimsExtracted} claims, created ${result.evidenceCreated} evidence items`,
+        data: result,
+      });
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      logger.error(`Ingestion failed: ${errorMsg}`);
+      throw createError(
+        `Document ingestion failed: ${errorMsg}`,
+        500,
+        'INGESTION_FAILED'
+      );
+    }
+  })
+);
+
+/**
+ * POST /api/evidence/ingest/url - Ingest a document from URL
+ *
+ * Fetches content from a URL and processes through the ingestion pipeline.
+ *
+ * Body:
+ * - url: URL to fetch and ingest (required)
+ * - projectId: Project to add evidence to (required)
+ * - options?: Ingestion options
+ */
+router.post('/ingest/url',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { url, projectId, options = {} } = req.body;
+
+    // Validate URL
+    if (!url || typeof url !== 'string') {
+      throw createError(
+        'Valid URL is required',
+        400,
+        'INVALID_URL'
+      );
+    }
+
+    try {
+      new URL(url); // Validate URL format
+    } catch {
+      throw createError(
+        'Invalid URL format',
+        400,
+        'INVALID_URL_FORMAT'
+      );
+    }
+
+    if (!projectId || !mongoose.Types.ObjectId.isValid(projectId)) {
+      throw createError(
+        'Valid projectId is required',
+        400,
+        'INVALID_PROJECT_ID'
+      );
+    }
+
+    // Check permissions
+    const hasEditPermission = await checkEditPermission(
+      projectId,
+      req.user!._id.toString()
+    );
+
+    if (!hasEditPermission) {
+      throw createError(
+        'You do not have permission to add evidence to this project',
+        403,
+        'EDIT_PERMISSION_DENIED'
+      );
+    }
+
+    try {
+      const { ingestFromUrl } = await import('../services/ingestion');
+
+      const result = await ingestFromUrl(
+        url,
+        projectId,
+        req.user!._id.toString(),
+        options
+      );
+
+      // Clear caches
+      await redisManager.deletePattern('evidence:*');
+      await redisManager.deletePattern('graph:*');
+
+      logger.info(`URL ingested: ${result.evidenceCreated} evidence created from ${url}`);
+
+      res.status(201).json({
+        success: true,
+        message: `Ingested ${result.claimsExtracted} claims from URL`,
+        data: result,
+      });
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      logger.error(`URL ingestion failed: ${errorMsg}`);
+      throw createError(
+        `URL ingestion failed: ${errorMsg}`,
+        500,
+        'URL_INGESTION_FAILED'
+      );
+    }
+  })
+);
+
+/**
  * GET /api/evidence/claim/:claimId - Get all evidence for a specific claim
  */
 router.get('/claim/:claimId',
