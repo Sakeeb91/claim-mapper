@@ -102,6 +102,12 @@ export interface IEvidence extends Document {
     lastCited?: Date;
     contexts: string[]; // Different contexts where this evidence was used
   };
+  vectorSync?: {
+    syncedAt?: Date;
+    status: 'pending' | 'synced' | 'failed' | 'disabled';
+    error?: string;
+    vectorId?: string;
+  };
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -308,6 +314,16 @@ const evidenceSchema = new Schema<IEvidence>({
     lastCited: Date,
     contexts: [String],
   },
+  vectorSync: {
+    syncedAt: Date,
+    status: {
+      type: String,
+      enum: ['pending', 'synced', 'failed', 'disabled'],
+      default: 'pending',
+    },
+    error: String,
+    vectorId: String,
+  },
   isActive: {
     type: Boolean,
     default: true,
@@ -392,6 +408,102 @@ evidenceSchema.pre('save', function(next) {
   }
   
   next();
+});
+
+// Post-save hook for vector database synchronization
+// Non-blocking: vector sync failures don't affect MongoDB operations
+evidenceSchema.post('save', async function(doc) {
+  // Skip if vector sync is disabled or document is not active
+  if (doc.vectorSync?.status === 'disabled' || !doc.isActive) {
+    return;
+  }
+
+  try {
+    // Dynamic import to avoid circular dependencies and allow optional feature
+    const vectorStore = await import('../services/vectorStore');
+    const embedding = await import('../services/embedding');
+    const vectorConfig = await import('../config/vectordb');
+
+    // Check if vector features are enabled
+    if (!vectorConfig.isVectorDbEnabled() || !embedding.isEmbeddingEnabled()) {
+      return;
+    }
+
+    // Prepare metadata for vector storage (ensure no undefined values)
+    await vectorStore.upsertEvidence({
+      id: doc._id.toString(),
+      text: doc.text,
+      metadata: {
+        evidenceType: doc.type,
+        sourceType: doc.source?.type || 'unknown',
+        sourceUrl: doc.source?.url || '',
+        sourceTitle: doc.source?.title || '',
+        projectId: doc.project.toString(),
+        createdAt: doc.createdAt.toISOString(),
+        reliabilityScore: doc.reliability?.score || 0,
+        keywords: doc.keywords || [],
+      },
+    });
+
+    // Update sync status using mongoose model directly
+    const EvidenceModel = mongoose.model('Evidence');
+    await EvidenceModel.updateOne(
+      { _id: doc._id },
+      {
+        $set: {
+          'vectorSync.syncedAt': new Date(),
+          'vectorSync.status': 'synced',
+          'vectorSync.vectorId': doc._id.toString(),
+          'vectorSync.error': null,
+        },
+      }
+    );
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error(`Failed to sync evidence ${doc._id} to vector DB:`, errorMessage);
+
+    // Update sync status to failed
+    try {
+      const EvidenceModel = mongoose.model('Evidence');
+      await EvidenceModel.updateOne(
+        { _id: doc._id },
+        {
+          $set: {
+            'vectorSync.status': 'failed',
+            'vectorSync.error': errorMessage.substring(0, 500),
+          },
+        }
+      );
+    } catch {
+      // Ignore status update failures
+    }
+  }
+});
+
+// Post-remove hook for vector database cleanup
+evidenceSchema.post('findOneAndDelete', async function(doc) {
+  if (!doc) return;
+
+  try {
+    const vectorStore = await import('../services/vectorStore');
+    const vectorConfig = await import('../config/vectordb');
+
+    if (!vectorConfig.isVectorDbEnabled()) {
+      return;
+    }
+
+    await vectorStore.deleteEvidence(doc._id.toString());
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error(`Failed to remove evidence ${doc._id} from vector DB:`, errorMessage);
+    // Non-blocking: don't throw
+  }
+});
+
+// Also handle deleteOne and deleteMany
+evidenceSchema.post('deleteOne', async function() {
+  // Note: deleteOne doesn't have access to the document, so we can't get the ID
+  // The sync script should handle orphaned vectors
 });
 
 // Static methods
