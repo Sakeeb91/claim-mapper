@@ -4,7 +4,7 @@ import { logger } from '../utils/logger';
 /**
  * Type definitions for Redis stored data
  */
-interface SessionData {
+export interface SessionData {
   userId: string;
   email?: string;
   roles?: string[];
@@ -13,14 +13,14 @@ interface SessionData {
   [key: string]: unknown;
 }
 
-interface UserActivity {
+export interface UserActivity {
   action: string;
   resource?: string;
   details?: Record<string, unknown>;
   timestamp: Date;
 }
 
-interface SearchResult {
+export interface SearchResult {
   id: string;
   score?: number;
   [key: string]: unknown;
