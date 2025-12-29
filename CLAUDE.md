@@ -273,7 +273,8 @@ gh run view <run-id> --log-failed    # View failure logs
 - `docker-compose.dev.yml` - Multi-service development orchestration (7 services)
 - `next.config.js` - Next.js configuration
 - `backend/api/tsconfig.json` - Backend TypeScript config
-- `backend/ml/requirements.txt` - Python ML dependencies
+- `backend/ml/requirements.txt` - Python ML dependencies (full)
+- `backend/ml/requirements-ci.txt` - Python ML dependencies (minimal for CI)
 - `backend/ml/.env.example` - 🆕 ML service environment variables template
 - `playwright.config.ts` - E2E test configuration
 - `jest.config.js` - Frontend/backend test configuration
