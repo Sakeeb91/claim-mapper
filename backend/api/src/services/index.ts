@@ -78,3 +78,17 @@ export type {
   ClassificationResult,
   LLMProvider,
 } from './linking';
+
+// Deduplication service
+export {
+  checkForDuplicates,
+  findDuplicateClusters,
+  generateDeduplicationReport,
+} from './deduplication';
+
+export type {
+  DuplicateCheckResult,
+  DuplicateCluster,
+  DeduplicationOptions,
+  DeduplicationReport,
+} from './deduplication';
