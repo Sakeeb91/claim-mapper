@@ -54,3 +54,27 @@ export type {
   Chunk,
   ChunkOptions,
 } from './ingestion';
+
+// Semantic linking pipeline
+export {
+  linkPremiseToEvidence,
+  linkPremisesBatch,
+  filterSupportingEvidence,
+  filterRefutingEvidence,
+  calculateCoverageStats,
+  rerank,
+  isRerankerEnabled,
+  classifyRelationship,
+  classifyRelationshipsBatch,
+  isClassifierEnabled,
+} from './linking';
+
+export type {
+  LinkedEvidence,
+  LinkingOptions,
+  LinkingResult,
+  RerankResult,
+  Relationship,
+  ClassificationResult,
+  LLMProvider,
+} from './linking';
