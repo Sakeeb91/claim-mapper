@@ -96,7 +96,7 @@ class RedisManager {
   }
 
   // Session Management
-  async setSession(sessionId: string, sessionData: any, ttl: number = 3600): Promise<void> {
+  async setSession(sessionId: string, sessionData: SessionData, ttl: number = 3600): Promise<void> {
     try {
       await this.client.setEx(`session:${sessionId}`, ttl, JSON.stringify(sessionData));
     } catch (error) {
@@ -105,10 +105,10 @@ class RedisManager {
     }
   }
 
-  async getSession(sessionId: string): Promise<any | null> {
+  async getSession(sessionId: string): Promise<SessionData | null> {
     try {
       const data = await this.client.get(`session:${sessionId}`);
-      return data ? JSON.parse(data) : null;
+      return data ? (JSON.parse(data) as SessionData) : null;
     } catch (error) {
       logger.error('Error getting session:', error);
       return null;
