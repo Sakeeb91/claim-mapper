@@ -322,6 +322,21 @@ The system includes optional vector database integration for semantic search:
 - **Migration Script**: `npm run sync:vectordb` - Sync existing evidence to vector DB
 - **Optional Feature**: System works without vector DB; semantic features gracefully degrade
 
+### Semantic Linking Pipeline (NEW)
+The system includes intelligent premise-to-evidence linking for reasoning chains:
+- **Matcher Service**: `backend/api/src/services/linking/matcher.ts` - Orchestrates the full linking pipeline
+- **Cross-Encoder Reranking**: `backend/api/src/services/linking/reranker.ts` - LLM-based reranking for precision
+- **Relationship Classification**: `backend/api/src/services/linking/classifier.ts` - Classifies support/refute/neutral
+- **Deduplication**: `backend/api/src/services/deduplication.ts` - Duplicate detection and clustering
+- **Auto-linking**: Reasoning chain generation automatically links evidence to premise steps
+- **Endpoints**:
+  - `GET /api/reasoning/:id/coverage` - Get evidence coverage stats for all premises
+  - `GET /api/reasoning/:id/steps/:stepNumber/evidence` - Get linked evidence for a specific step
+- **Frontend Components**:
+  - `CoverageHeatmap` - Visual overview of premise support status (green/red/yellow/gray)
+  - `EvidenceDrawer` - Slide-out panel showing detailed linked evidence
+  - `useCoverage` hook - React Query hook for fetching coverage data
+
 ## Documentation
 
 Comprehensive documentation is now organized in the `docs/` directory:
