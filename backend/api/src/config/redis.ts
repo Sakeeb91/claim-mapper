@@ -134,7 +134,7 @@ class RedisManager {
   }
 
   // Caching
-  async set(key: string, value: any, ttl?: number): Promise<void> {
+  async set<T>(key: string, value: T, ttl?: number): Promise<void> {
     try {
       const stringValue = typeof value === 'string' ? value : JSON.stringify(value);
       if (ttl) {
@@ -148,15 +148,15 @@ class RedisManager {
     }
   }
 
-  async get(key: string): Promise<any | null> {
+  async get<T = unknown>(key: string): Promise<T | null> {
     try {
       const data = await this.client.get(key);
       if (!data) return null;
-      
+
       try {
-        return JSON.parse(data);
+        return JSON.parse(data) as T;
       } catch {
-        return data; // Return as string if not JSON
+        return data as T; // Return as string if not JSON
       }
     } catch (error) {
       logger.error('Error getting cache:', error);
