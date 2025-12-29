@@ -385,7 +385,7 @@ class RedisManager {
   }
 
   // Get Redis info
-  async getInfo(): Promise<any> {
+  async getInfo(): Promise<string | null> {
     try {
       const info = await this.client.info();
       return info;
@@ -405,7 +405,7 @@ class RedisManager {
     }
   }
 
-  async mset(keyValues: Record<string, any>): Promise<void> {
+  async mset(keyValues: Record<string, unknown>): Promise<void> {
     try {
       const multi = this.client.multi();
       Object.entries(keyValues).forEach(([key, value]) => {
