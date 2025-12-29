@@ -20,6 +20,15 @@ export interface IReasoningChain extends Document {
       generatedBy: 'ai' | 'human' | 'hybrid';
       sourceModel?: string;
       timestamp: Date;
+      linkedEvidence?: Array<{
+        evidenceId: string;
+        evidenceText: string;
+        relationship: 'supports' | 'refutes' | 'partial_support' | 'partial_refute' | 'neutral';
+        confidence: number;
+        vectorScore?: number;
+        rerankScore?: number;
+        sourceUrl?: string;
+      }>;
     };
   }>;
   structure: {
@@ -177,6 +186,18 @@ const reasoningChainSchema = new Schema<IReasoningChain>({
       },
       sourceModel: String,
       timestamp: { type: Date, default: Date.now },
+      linkedEvidence: [{
+        evidenceId: String,
+        evidenceText: String,
+        relationship: {
+          type: String,
+          enum: ['supports', 'refutes', 'partial_support', 'partial_refute', 'neutral'],
+        },
+        confidence: Number,
+        vectorScore: Number,
+        rerankScore: Number,
+        sourceUrl: String,
+      }],
     },
   }],
   structure: {
