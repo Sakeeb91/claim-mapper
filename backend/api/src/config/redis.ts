@@ -208,7 +208,7 @@ class RedisManager {
   }
 
   // Real-time Collaboration
-  async publishToChannel(channel: string, message: any): Promise<void> {
+  async publishToChannel<T>(channel: string, message: T): Promise<void> {
     try {
       await this.client.publish(channel, JSON.stringify(message));
     } catch (error) {
@@ -217,18 +217,18 @@ class RedisManager {
     }
   }
 
-  async subscribeToChannel(channel: string, callback: (message: any) => void): Promise<void> {
+  async subscribeToChannel<T = unknown>(channel: string, callback: (message: T) => void): Promise<void> {
     try {
       const subscriber = this.client.duplicate();
       await subscriber.connect();
-      
+
       await subscriber.subscribe(channel, (message) => {
         try {
-          const parsedMessage = JSON.parse(message);
+          const parsedMessage = JSON.parse(message) as T;
           callback(parsedMessage);
         } catch (error) {
           logger.error('Error parsing subscribed message:', error);
-          callback(message);
+          callback(message as unknown as T);
         }
       });
     } catch (error) {
