@@ -282,14 +282,14 @@ class TestClaimExtractor:
         # Mock keyword extraction
         claim_extractor._extract_keywords = AsyncMock(return_value=['climate', 'change'])
         claim_extractor._find_related_evidence = AsyncMock(return_value=[])
-        
+
         # Mock classification - first sentence high confidence, second low
-        def mock_classify_claim(sentence):
-            if "climate change" in sentence:
-                return asyncio.create_task(asyncio.coroutine(lambda: 0.9)())
+        async def mock_classify_claim(sentence):
+            if "climate change" in sentence.lower():
+                return 0.9
             else:
-                return asyncio.create_task(asyncio.coroutine(lambda: 0.4)())
-        
+                return 0.4
+
         claim_extractor._classify_claim = mock_classify_claim
         claim_extractor._classify_claim_type = AsyncMock(return_value=ClaimType.ASSERTION)
 
