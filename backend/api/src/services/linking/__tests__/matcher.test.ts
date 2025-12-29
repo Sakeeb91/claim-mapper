@@ -10,6 +10,8 @@ import {
   calculateCoverageStats,
   LinkedEvidence,
 } from '../matcher';
+import { rerank } from '../reranker';
+import { classifyRelationship } from '../classifier';
 
 // Mock the dependencies
 jest.mock('../../vectorStore', () => ({
@@ -82,8 +84,6 @@ describe('Premise-Evidence Matcher', () => {
     });
 
     it('should respect skipReranking option', async () => {
-      const { rerank } = require('../reranker');
-
       await linkPremiseToEvidence('Test premise', 'project-123', {
         skipReranking: true,
       });
@@ -92,8 +92,6 @@ describe('Premise-Evidence Matcher', () => {
     });
 
     it('should respect skipClassification option', async () => {
-      const { classifyRelationship } = require('../classifier');
-
       await linkPremiseToEvidence('Test premise', 'project-123', {
         skipClassification: true,
       });
