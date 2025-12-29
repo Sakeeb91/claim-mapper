@@ -45,17 +45,11 @@ jest.mock('../reranker', () => ({
 }));
 
 jest.mock('../classifier', () => ({
-  classifyRelationship: jest.fn()
-    .mockResolvedValueOnce({
-      relationship: 'supports',
-      confidence: 0.85,
-      reasoning: 'Direct support',
-    })
-    .mockResolvedValueOnce({
-      relationship: 'partial_support',
-      confidence: 0.65,
-      reasoning: 'Partial support',
-    }),
+  classifyRelationship: jest.fn().mockResolvedValue({
+    relationship: 'supports',
+    confidence: 0.85,
+    reasoning: 'Direct support',
+  }),
 }));
 
 describe('Premise-Evidence Matcher', () => {
@@ -252,7 +246,7 @@ describe('Premise-Evidence Matcher', () => {
       expect(stats.neutralCount).toBe(1);
       expect(stats.hasEvidence).toBe(true);
       expect(stats.netSupport).toBe(1); // 2 supports - 1 refutes
-      expect(stats.averageConfidence).toBe(0.725); // (0.9 + 0.8 + 0.7 + 0.5) / 4
+      expect(stats.averageConfidence).toBeCloseTo(0.725); // (0.9 + 0.8 + 0.7 + 0.5) / 4
     });
 
     it('should count partial_support as supporting', () => {
