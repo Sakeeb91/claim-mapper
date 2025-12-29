@@ -31,11 +31,13 @@ class TestClaimExtractor:
             mock_pipeline.return_value = mock_classifier
             
             extractor = ClaimExtractor()
-            # Mock the async model loading
+            # Mock the async model loading by setting models directly
             extractor.nlp = mock_spacy_model
             extractor.similarity_model = mock_sentence_transformer
             extractor.claim_classifier = mock_classifier
-            
+            # Mark as initialized to skip async model loading
+            extractor._initialized = True
+
             return extractor
 
     @pytest.mark.asyncio
