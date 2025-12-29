@@ -15,16 +15,25 @@ from models.schemas import ClaimExtractionResponse, ExtractedClaim, ClaimType
 
 class ClaimExtractor:
     """Service for extracting claims from text using NLP models"""
-    
+
     def __init__(self):
         self.tokenizer = None
         self.model = None
         self.similarity_model = None
         self.nlp = None
         self.claim_classifier = None
-        
-        # Initialize models
-        asyncio.create_task(self._load_models())
+        self._initialized = False
+
+    async def initialize(self):
+        """Initialize models lazily. Call this before using the extractor."""
+        if not self._initialized:
+            await self._load_models()
+            self._initialized = True
+
+    async def _ensure_initialized(self):
+        """Ensure models are loaded before use."""
+        if not self._initialized:
+            await self.initialize()
     
     async def _load_models(self):
         """Load all required models"""
@@ -58,7 +67,8 @@ class ClaimExtractor:
         extract_evidence: bool = True
     ) -> ClaimExtractionResponse:
         """Extract claims from input text"""
-        
+        await self._ensure_initialized()
+
         start_time = asyncio.get_event_loop().time()
         
         try:
