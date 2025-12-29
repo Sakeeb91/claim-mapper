@@ -13,6 +13,9 @@ import shutil
 from typing import Dict, List, Any
 import sys
 
+# Configure pytest-asyncio to use auto mode for async tests
+pytest_plugins = ('pytest_asyncio',)
+
 # Mock heavy ML dependencies globally for all tests
 mock_transformers = MagicMock()
 mock_transformers.AutoTokenizer = MagicMock()
@@ -47,9 +50,16 @@ except ImportError:
 
 
 @pytest.fixture(scope="session")
-def event_loop():
-    """Create an instance of the default event loop for the test session."""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
+def event_loop_policy():
+    """Return the event loop policy for the test session."""
+    return asyncio.get_event_loop_policy()
+
+
+@pytest.fixture(scope="function")
+def event_loop(event_loop_policy):
+    """Create a new event loop for each test function."""
+    loop = event_loop_policy.new_event_loop()
+    asyncio.set_event_loop(loop)
     yield loop
     loop.close()
 
