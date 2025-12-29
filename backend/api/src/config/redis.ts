@@ -279,7 +279,7 @@ class RedisManager {
   }
 
   // Search Result Caching
-  async cacheSearchResults(query: string, results: any[], ttl: number = 1800): Promise<void> {
+  async cacheSearchResults<T = SearchResult>(query: string, results: T[], ttl: number = 1800): Promise<void> {
     try {
       const searchKey = `search:${Buffer.from(query).toString('base64')}`;
       await this.set(searchKey, results, ttl);
@@ -289,10 +289,10 @@ class RedisManager {
     }
   }
 
-  async getCachedSearchResults(query: string): Promise<any[] | null> {
+  async getCachedSearchResults<T = SearchResult>(query: string): Promise<T[] | null> {
     try {
       const searchKey = `search:${Buffer.from(query).toString('base64')}`;
-      return await this.get(searchKey);
+      return await this.get<T[]>(searchKey);
     } catch (error) {
       logger.error('Error getting cached search results:', error);
       return null;
