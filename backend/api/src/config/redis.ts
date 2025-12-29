@@ -42,10 +42,11 @@ class RedisManager {
       url: redisUrl,
       socket: {
         connectTimeout: 10000,
-        lazyConnect: true,
+        reconnectStrategy: (retries: number) => {
+          if (retries > 3) return new Error('Max retries reached');
+          return Math.min(retries * 100, 3000);
+        },
       },
-      retry_delay_on_failover: 100,
-      max_attempts: 3,
     });
 
     this.setupEventHandlers();
