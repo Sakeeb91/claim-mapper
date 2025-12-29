@@ -344,3 +344,58 @@ export interface ReasoningChainVisualizerProps {
   interactive?: boolean;
   compact?: boolean;
 }
+
+// Coverage visualization types
+export interface LinkedEvidence {
+  evidenceId: string;
+  evidenceText: string;
+  relationship: 'supports' | 'refutes' | 'partial_support' | 'partial_refute' | 'neutral';
+  confidence: number;
+  vectorScore?: number;
+  rerankScore?: number;
+  sourceUrl?: string;
+  sourceTitle?: string;
+}
+
+export interface PremiseCoverage {
+  stepNumber: number;
+  premiseText: string;
+  supportCount: number;
+  refuteCount: number;
+  neutralCount: number;
+  hasEvidence: boolean;
+  netSupport: number;
+  totalEvidence: number;
+  averageConfidence: number;
+}
+
+export interface CoverageSummary {
+  totalPremises: number;
+  withEvidence: number;
+  supported: number;
+  contested: number;
+  mixed: number;
+  noEvidence: number;
+}
+
+export interface CoverageData {
+  chainId: string;
+  coverage: PremiseCoverage[];
+  summary: CoverageSummary;
+}
+
+export interface CoverageHeatmapProps {
+  coverage: PremiseCoverage[];
+  onPremiseClick: (stepNumber: number) => void;
+  selectedStepNumber?: number;
+  className?: string;
+}
+
+export interface EvidenceDrawerProps {
+  isOpen: boolean;
+  onClose: () => void;
+  premiseText: string;
+  stepNumber: number;
+  evidence: LinkedEvidence[];
+  isLoading?: boolean;
+}
