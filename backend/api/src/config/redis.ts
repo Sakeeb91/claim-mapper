@@ -1,6 +1,31 @@
 import { createClient, RedisClientType } from 'redis';
 import { logger } from '../utils/logger';
 
+/**
+ * Type definitions for Redis stored data
+ */
+interface SessionData {
+  userId: string;
+  email?: string;
+  roles?: string[];
+  createdAt: string;
+  expiresAt: string;
+  [key: string]: unknown;
+}
+
+interface UserActivity {
+  action: string;
+  resource?: string;
+  details?: Record<string, unknown>;
+  timestamp: Date;
+}
+
+interface SearchResult {
+  id: string;
+  score?: number;
+  [key: string]: unknown;
+}
+
 class RedisManager {
   private client: RedisClientType;
   private isConnected: boolean = false;
