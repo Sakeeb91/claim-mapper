@@ -99,7 +99,7 @@ export async function checkVectorDbHealth(): Promise<{
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    logger.error('Vector DB health check failed:', error);
+    logger.error('Vector DB health check failed:', { error: errorMessage });
 
     return {
       healthy: false,
