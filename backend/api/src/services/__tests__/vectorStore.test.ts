@@ -5,6 +5,18 @@
  * Uses mocks to avoid hitting the actual Pinecone API.
  */
 
+import {
+  upsertEvidence,
+  upsertEvidenceBatch,
+  searchSimilar,
+  searchByProject,
+  deleteEvidence,
+  deleteEvidenceBatch,
+  getVectorStats,
+  checkDuplicate,
+} from '../vectorStore';
+import { isVectorDbEnabled } from '../../config/vectordb';
+
 // Mock the entire vectordb config module
 jest.mock('../../config/vectordb', () => ({
   isVectorDbEnabled: jest.fn().mockReturnValue(false),
@@ -24,76 +36,64 @@ jest.mock('../embedding', () => ({
   isEmbeddingEnabled: jest.fn().mockReturnValue(false),
 }));
 
+// Mock the logger to avoid console noise
+jest.mock('../../utils/logger', () => ({
+  logger: {
+    info: jest.fn(),
+    error: jest.fn(),
+    warn: jest.fn(),
+    debug: jest.fn(),
+  },
+}));
+
 describe('Vector Store Service', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Default to disabled
+    (isVectorDbEnabled as jest.Mock).mockReturnValue(false);
   });
 
   describe('when vector DB is disabled', () => {
     it('should skip upsert operations silently', async () => {
-      const { upsertEvidence } = await import('../vectorStore');
-      const { isVectorDbEnabled } = await import('../../config/vectordb');
-      (isVectorDbEnabled as jest.Mock).mockReturnValue(false);
+      const result = await upsertEvidence({
+        id: 'test-id',
+        text: 'Test evidence text',
+        metadata: {
+          evidenceType: 'empirical',
+          sourceType: 'document',
+          sourceUrl: 'https://example.com',
+          sourceTitle: 'Test Source',
+          projectId: 'project-123',
+          createdAt: new Date().toISOString(),
+          reliabilityScore: 0.8,
+          keywords: ['test'],
+        },
+      });
 
-      // Should not throw
-      await expect(
-        upsertEvidence({
-          id: 'test-id',
-          text: 'Test evidence text',
-          metadata: {
-            evidenceType: 'empirical',
-            sourceType: 'document',
-            sourceUrl: 'https://example.com',
-            sourceTitle: 'Test Source',
-            projectId: 'project-123',
-            createdAt: new Date().toISOString(),
-            reliabilityScore: 0.8,
-            keywords: ['test'],
-          },
-        })
-      ).resolves.toBeUndefined();
+      expect(result).toBeUndefined();
     });
 
     it('should return empty results for search', async () => {
-      const { searchSimilar } = await import('../vectorStore');
-      const { isVectorDbEnabled } = await import('../../config/vectordb');
-      (isVectorDbEnabled as jest.Mock).mockReturnValue(false);
-
       const results = await searchSimilar('test query');
       expect(results).toEqual([]);
     });
 
     it('should return empty results for searchByProject', async () => {
-      const { searchByProject } = await import('../vectorStore');
-      const { isVectorDbEnabled } = await import('../../config/vectordb');
-      (isVectorDbEnabled as jest.Mock).mockReturnValue(false);
-
       const results = await searchByProject('test query', 'project-123');
       expect(results).toEqual([]);
     });
 
     it('should skip delete operations silently', async () => {
-      const { deleteEvidence } = await import('../vectorStore');
-      const { isVectorDbEnabled } = await import('../../config/vectordb');
-      (isVectorDbEnabled as jest.Mock).mockReturnValue(false);
-
-      await expect(deleteEvidence('test-id')).resolves.toBeUndefined();
+      const result = await deleteEvidence('test-id');
+      expect(result).toBeUndefined();
     });
 
     it('should return null for getVectorStats', async () => {
-      const { getVectorStats } = await import('../vectorStore');
-      const { isVectorDbEnabled } = await import('../../config/vectordb');
-      (isVectorDbEnabled as jest.Mock).mockReturnValue(false);
-
       const stats = await getVectorStats();
       expect(stats).toBeNull();
     });
 
     it('should return not duplicate when checking duplicates', async () => {
-      const { checkDuplicate } = await import('../vectorStore');
-      const { isVectorDbEnabled } = await import('../../config/vectordb');
-      (isVectorDbEnabled as jest.Mock).mockReturnValue(false);
-
       const result = await checkDuplicate('test text', 'project-123');
       expect(result.isDuplicate).toBe(false);
     });
@@ -101,20 +101,12 @@ describe('Vector Store Service', () => {
 
   describe('batch operations', () => {
     it('should handle empty batch gracefully', async () => {
-      const { upsertEvidenceBatch } = await import('../vectorStore');
-      const { isVectorDbEnabled } = await import('../../config/vectordb');
-      (isVectorDbEnabled as jest.Mock).mockReturnValue(false);
-
       const result = await upsertEvidenceBatch([]);
       expect(result.success).toBe(0);
       expect(result.failed).toBe(0);
     });
 
     it('should skip batch with empty texts', async () => {
-      const { upsertEvidenceBatch } = await import('../vectorStore');
-      const { isVectorDbEnabled } = await import('../../config/vectordb');
-      (isVectorDbEnabled as jest.Mock).mockReturnValue(false);
-
       const result = await upsertEvidenceBatch([
         {
           id: 'test-1',
@@ -136,10 +128,6 @@ describe('Vector Store Service', () => {
     });
 
     it('should report batch delete results', async () => {
-      const { deleteEvidenceBatch } = await import('../vectorStore');
-      const { isVectorDbEnabled } = await import('../../config/vectordb');
-      (isVectorDbEnabled as jest.Mock).mockReturnValue(false);
-
       const result = await deleteEvidenceBatch(['id-1', 'id-2']);
       expect(result.success).toBe(0);
       expect(result.failed).toBe(0);
@@ -147,20 +135,17 @@ describe('Vector Store Service', () => {
   });
 
   describe('empty query handling', () => {
-    it('should return empty for empty query string', async () => {
-      const { searchSimilar } = await import('../vectorStore');
-      const { isVectorDbEnabled } = await import('../../config/vectordb');
+    beforeEach(() => {
+      // Enable vector DB for these tests but test empty query handling
       (isVectorDbEnabled as jest.Mock).mockReturnValue(true);
+    });
 
+    it('should return empty for empty query string', async () => {
       const results = await searchSimilar('');
       expect(results).toEqual([]);
     });
 
     it('should return empty for whitespace-only query', async () => {
-      const { searchSimilar } = await import('../vectorStore');
-      const { isVectorDbEnabled } = await import('../../config/vectordb');
-      (isVectorDbEnabled as jest.Mock).mockReturnValue(true);
-
       const results = await searchSimilar('   ');
       expect(results).toEqual([]);
     });

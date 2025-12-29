@@ -18,6 +18,11 @@ export interface UserActivity {
   resource?: string;
   details?: Record<string, unknown>;
   timestamp: Date;
+  // Reasoning-specific activity fields
+  reasoningChainId?: string;
+  claimId?: string;
+  reasoningType?: string;
+  validationScore?: number;
 }
 
 export interface SearchResult {

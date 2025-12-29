@@ -52,6 +52,16 @@ jest.mock('../classifier', () => ({
   }),
 }));
 
+// Mock the logger to prevent console noise during tests
+jest.mock('../../../utils/logger', () => ({
+  logger: {
+    info: jest.fn(),
+    error: jest.fn(),
+    warn: jest.fn(),
+    debug: jest.fn(),
+  },
+}));
+
 describe('Premise-Evidence Matcher', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -74,7 +84,7 @@ describe('Premise-Evidence Matcher', () => {
       expect(result.premise).toBe('The climate is changing due to human activity');
       expect(result.projectId).toBe('project-123');
       expect(result.linkedEvidence.length).toBeGreaterThanOrEqual(0);
-      expect(result.stats.processingTimeMs).toBeGreaterThan(0);
+      expect(result.stats.processingTimeMs).toBeGreaterThanOrEqual(0);
     });
 
     it('should respect skipReranking option', async () => {

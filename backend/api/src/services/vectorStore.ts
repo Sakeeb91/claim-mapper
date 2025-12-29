@@ -418,7 +418,8 @@ export async function checkDuplicate(
 
     return { isDuplicate: false };
   } catch (error) {
-    logger.error('Duplicate check failed:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    logger.error('Duplicate check failed:', { error: errorMessage });
     return { isDuplicate: false };
   }
 }
