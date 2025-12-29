@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery } from 'react-query';
 import { CoverageData, LinkedEvidence } from '@/types';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
@@ -76,13 +76,15 @@ export function useCoverage(
 ) {
   const { enabled = true, refetchOnWindowFocus = false } = options;
 
-  return useQuery({
-    queryKey: ['coverage', chainId],
-    queryFn: () => fetchCoverage(chainId!, token!),
-    enabled: enabled && !!chainId && !!token,
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    refetchOnWindowFocus,
-  });
+  return useQuery(
+    ['coverage', chainId],
+    () => fetchCoverage(chainId!, token!),
+    {
+      enabled: enabled && !!chainId && !!token,
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      refetchOnWindowFocus,
+    }
+  );
 }
 
 /**
@@ -104,13 +106,15 @@ export function useStepEvidence(
 ) {
   const { enabled = true, refetchOnWindowFocus = false } = options;
 
-  return useQuery({
-    queryKey: ['stepEvidence', chainId, stepNumber],
-    queryFn: () => fetchStepEvidence(chainId!, stepNumber!, token!),
-    enabled: enabled && !!chainId && stepNumber !== undefined && !!token,
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    refetchOnWindowFocus,
-  });
+  return useQuery(
+    ['stepEvidence', chainId, stepNumber],
+    () => fetchStepEvidence(chainId!, stepNumber!, token!),
+    {
+      enabled: enabled && !!chainId && stepNumber !== undefined && !!token,
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      refetchOnWindowFocus,
+    }
+  );
 }
 
 export default useCoverage;
