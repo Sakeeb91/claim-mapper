@@ -45,6 +45,7 @@ import {
   REASONING_TYPES,
   REASONING_STATUSES,
 } from '../constants/validation';
+import { linkPremiseToEvidence, LinkedEvidence } from '../services/linking';
 
 const router = express.Router();
 
@@ -315,6 +316,62 @@ router.post('/generate',
 
     await reasoningChain.save();
 
+    // Auto-link evidence to premise steps using semantic linking pipeline
+    let linkingStats = { linked: 0, premises: 0 };
+    try {
+      for (let i = 0; i < reasoningChain.steps.length; i++) {
+        const step = reasoningChain.steps[i];
+        if (step.type === 'premise') {
+          linkingStats.premises++;
+          const linkingResult = await linkPremiseToEvidence(
+            step.text,
+            project._id.toString(),
+            { rerankK: 3, minScore: 0.4 }
+          );
+
+          if (linkingResult.linkedEvidence.length > 0) {
+            // Store linked evidence in step metadata
+            reasoningChain.steps[i].metadata.linkedEvidence = linkingResult.linkedEvidence.map((e) => ({
+              evidenceId: e.evidenceId,
+              evidenceText: e.evidenceText,
+              relationship: e.relationship,
+              confidence: e.confidence,
+              vectorScore: e.vectorScore,
+              rerankScore: e.rerankScore,
+              sourceUrl: e.sourceUrl,
+            }));
+
+            // Also add supporting evidence IDs to the step's evidence array
+            const supportingIds = linkingResult.linkedEvidence
+              .filter((e) => e.relationship === 'supports' || e.relationship === 'partial_support')
+              .map((e) => new mongoose.Types.ObjectId(e.evidenceId));
+
+            reasoningChain.steps[i].evidence = [
+              ...reasoningChain.steps[i].evidence,
+              ...supportingIds,
+            ];
+            linkingStats.linked++;
+          }
+        }
+      }
+
+      // Save the chain again with linked evidence
+      if (linkingStats.linked > 0) {
+        await reasoningChain.save();
+        logger.info('Auto-linked evidence to reasoning chain', {
+          chainId: reasoningChain._id,
+          premisesLinked: linkingStats.linked,
+          totalPremises: linkingStats.premises,
+        });
+      }
+    } catch (linkError) {
+      // Log but don't fail the request if linking fails
+      logger.warn('Evidence auto-linking failed, continuing without links', {
+        chainId: reasoningChain._id,
+        error: linkError instanceof Error ? linkError.message : 'Unknown error',
+      });
+    }
+
     // Populate for response
     await reasoningChain.populate([
       { path: 'claim', select: 'text type confidence' },
@@ -351,6 +408,10 @@ router.post('/generate',
         fallacies: mlResponse.fallacies,
         gaps: mlResponse.logical_gaps,
         confidence: mlResponse.reasoning_chains?.[0]?.overall_confidence,
+      },
+      linkingStats: {
+        premisesProcessed: linkingStats.premises,
+        premisesLinked: linkingStats.linked,
       },
     });
   })
