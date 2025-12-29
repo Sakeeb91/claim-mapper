@@ -71,7 +71,11 @@ router.get('/',
     
     // Check cache first
     const cacheKey = `claims:${JSON.stringify({ query, page, limit, sort, order })}`;
-    const cachedResult = await redisManager.get(cacheKey);
+    interface CachedClaimsResult {
+      claims: unknown[];
+      pagination: Record<string, unknown>;
+    }
+    const cachedResult = await redisManager.get<CachedClaimsResult>(cacheKey);
     if (cachedResult) {
       res.json({
         success: true,
@@ -158,8 +162,8 @@ router.post('/',
     // Track activity
     await redisManager.trackUserActivity(req.user!._id.toString(), {
       action: 'create_claim',
-      claimId: claim._id,
-      projectId: claim.project,
+      claimId: claim._id.toString(),
+      details: { projectId: claim.project.toString() },
     });
     
     // If AI analysis is enabled, trigger ML analysis
@@ -238,8 +242,8 @@ router.get('/:id',
     // Track view activity
     await redisManager.trackUserActivity(userId, {
       action: 'view_claim',
-      claimId: claim._id,
-      projectId: claim.project,
+      claimId: claim._id.toString(),
+      details: { projectId: claim.project.toString() },
     });
     
     res.json({

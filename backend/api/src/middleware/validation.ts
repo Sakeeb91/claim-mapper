@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import Joi from 'joi';
 import { logger } from '../utils/logger';
+import redisManager from '../config/redis';
 
 // Custom validation schemas
 export const validationSchemas = {
@@ -427,7 +428,7 @@ export const validationSchemas = {
 };
 
 // Validation middleware factory
-export const validate = (schema: Joi.ObjectSchema, source: 'body' | 'query' | 'params' = 'body') => {
+export const validate = (schema: Joi.Schema, source: 'body' | 'query' | 'params' = 'body') => {
   return (req: Request, res: Response, next: NextFunction): void => {
     const data = req[source];
     
@@ -470,8 +471,9 @@ export const validateFile = (options: {
 }) => {
   return (req: Request, res: Response, next: NextFunction): void => {
     const { required = false, maxSize = 50 * 1024 * 1024, allowedTypes = [], fieldName = 'file' } = options;
-    
-    const file = req.file || req.files?.[fieldName];
+
+    const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
+    const file = req.file || (files && files[fieldName]?.[0]);
     
     if (required && !file) {
       res.status(400).json({

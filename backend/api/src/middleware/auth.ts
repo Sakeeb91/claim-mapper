@@ -298,7 +298,7 @@ class AuthMiddleware {
       role: user.role,
     };
 
-    return jwt.sign(payload, this.jwtSecret, {
+    return jwt.sign(payload as object, this.jwtSecret, {
       expiresIn: this.jwtExpiry,
       issuer: 'claim-mapper-api',
       audience: 'claim-mapper-client',
@@ -312,7 +312,7 @@ class AuthMiddleware {
       type: 'refresh',
     };
 
-    return jwt.sign(payload, this.jwtSecret, {
+    return jwt.sign(payload as object, this.jwtSecret, {
       expiresIn: this.refreshTokenExpiry,
       issuer: 'claim-mapper-api',
       audience: 'claim-mapper-client',
@@ -457,10 +457,10 @@ class AuthMiddleware {
 
       // Update last login in database periodically
       const lastUpdateKey = `last_activity_update:${userId}`;
-      const lastUpdate = await redisManager.get(lastUpdateKey);
+      const lastUpdate = await redisManager.get<number>(lastUpdateKey);
       const now = Date.now();
-      
-      if (!lastUpdate || (now - lastUpdate) > 300000) { // 5 minutes
+
+      if (!lastUpdate || (now - (lastUpdate as number)) > 300000) { // 5 minutes
         await User.findByIdAndUpdate(userId, { 
           lastLogin: new Date(),
           $push: {

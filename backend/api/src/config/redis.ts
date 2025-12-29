@@ -18,11 +18,8 @@ export interface UserActivity {
   resource?: string;
   details?: Record<string, unknown>;
   timestamp: Date;
-  // Reasoning-specific activity fields
-  reasoningChainId?: string;
-  claimId?: string;
-  reasoningType?: string;
-  validationScore?: number;
+  // Allow any additional fields
+  [key: string]: unknown;
 }
 
 export interface SearchResult {
@@ -310,7 +307,7 @@ class RedisManager {
     try {
       const activityKey = `activity:${userId}`;
       const activities = await this.get<UserActivity[]>(activityKey) || [];
-      activities.push({ ...activity, timestamp: new Date() });
+      activities.push({ ...activity, timestamp: new Date() } as UserActivity);
 
       // Keep only last 100 activities
       if (activities.length > 100) {

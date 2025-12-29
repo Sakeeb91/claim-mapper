@@ -74,12 +74,15 @@ export interface IEvidence extends Document {
     };
     timestamp: Date;
     resolved?: boolean;
+    createdAt?: Date;
   }>;
   relationships: Array<{
     evidenceId: mongoose.Types.ObjectId;
     relationship: 'supports' | 'contradicts' | 'complements' | 'duplicates';
     confidence: number;
     notes?: string;
+    type?: string;
+    createdAt?: Date;
   }>;
   quality: {
     overallScore: number;
@@ -87,8 +90,10 @@ export interface IEvidence extends Document {
     accuracyScore: number;
     objectivityScore: number;
     timelinessScore: number;
+    clarityScore?: number;
     issues: string[];
     recommendations: string[];
+    lastAssessed?: Date;
   };
   verification: {
     status: 'unverified' | 'verified' | 'disputed' | 'retracted';
@@ -96,11 +101,15 @@ export interface IEvidence extends Document {
     verifiedAt?: Date;
     verificationNotes?: string;
     disputeReasons?: string[];
+    notes?: string;
   };
   usage: {
     citationCount: number;
     lastCited?: Date;
-    contexts: string[]; // Different contexts where this evidence was used
+    contexts: string[];
+    citedIn?: mongoose.Types.ObjectId[];
+    usedInChains?: mongoose.Types.ObjectId[];
+    lastUsed?: Date;
   };
   vectorSync?: {
     syncedAt?: Date;
@@ -111,6 +120,9 @@ export interface IEvidence extends Document {
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
+  // Methods
+  verify(userId: string, notes?: string): Promise<IEvidence>;
+  dispute(reasons: string[]): Promise<IEvidence>;
 }
 
 const evidenceSchema = new Schema<IEvidence>({

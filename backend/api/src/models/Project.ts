@@ -109,6 +109,10 @@ export interface IProject extends Document {
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
+  // Methods
+  hasPermission(userId: string, permission: string): boolean;
+  addCollaborator(userId: string, role: string, invitedBy: string): Promise<IProject>;
+  removeCollaborator(userId: string): Promise<IProject>;
 }
 
 const projectSchema = new Schema<IProject>({
@@ -415,7 +419,7 @@ projectSchema.statics.searchProjects = function(query: string, userId?: string) 
 
 // Instance methods
 projectSchema.methods.addCollaborator = function(userId: string, role: string, invitedBy: string) {
-  const existingCollaborator = this.collaborators.find(c => 
+  const existingCollaborator = this.collaborators.find((c: IProject['collaborators'][0]) =>
     c.user.toString() === userId.toString()
   );
   
@@ -443,7 +447,7 @@ projectSchema.methods.addCollaborator = function(userId: string, role: string, i
 };
 
 projectSchema.methods.removeCollaborator = function(userId: string) {
-  this.collaborators = this.collaborators.filter(c => 
+  this.collaborators = this.collaborators.filter((c: IProject['collaborators'][0]) =>
     c.user.toString() !== userId.toString()
   );
   return this.save();
@@ -454,8 +458,8 @@ projectSchema.methods.hasPermission = function(userId: string, permission: strin
   if (this.owner.toString() === userId.toString()) {
     return true;
   }
-  
-  const collaborator = this.collaborators.find(c => 
+
+  const collaborator = this.collaborators.find((c: IProject['collaborators'][0]) =>
     c.user.toString() === userId.toString()
   );
   

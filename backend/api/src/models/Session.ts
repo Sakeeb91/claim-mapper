@@ -155,6 +155,13 @@ export interface ISession extends Document {
   endedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
+  // Virtual properties
+  duration?: number;
+  // Methods
+  addParticipant(userId: string, role?: string): Promise<ISession>;
+  removeParticipant(userId: string): Promise<ISession>;
+  addChatMessage(userId: string, content: string): Promise<ISession>;
+  endSession(): Promise<ISession>;
 }
 
 const sessionSchema = new Schema<ISession>({
@@ -550,7 +557,7 @@ sessionSchema.statics.findByUser = function(userId: string, includeCompleted: bo
 
 // Instance methods
 sessionSchema.methods.addParticipant = function(userId: string, role: string = 'participant') {
-  const existingParticipant = this.participants.find(p => 
+  const existingParticipant = this.participants.find((p: ISession['participants'][0]) =>
     p.user.toString() === userId.toString()
   );
   
@@ -592,7 +599,7 @@ sessionSchema.methods.addParticipant = function(userId: string, role: string = '
 };
 
 sessionSchema.methods.removeParticipant = function(userId: string) {
-  const participant = this.participants.find(p => 
+  const participant = this.participants.find((p: ISession['participants'][0]) =>
     p.user.toString() === userId.toString()
   );
   
@@ -655,9 +662,9 @@ sessionSchema.methods.addChatMessage = function(userId: string, message: string,
 sessionSchema.methods.endSession = function() {
   this.status = 'completed';
   this.endedAt = new Date();
-  
+
   // Mark all participants as inactive
-  this.participants.forEach(participant => {
+  this.participants.forEach((participant: ISession['participants'][0]) => {
     if (participant.isActive) {
       participant.isActive = false;
       participant.leftAt = new Date();

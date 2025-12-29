@@ -141,6 +141,8 @@ export interface IReasoningChain extends Document {
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
+  // Methods
+  addReview(reviewerId: string, rating: number, comments: string, focusAreas?: string[]): Promise<IReasoningChain>;
 }
 
 const reasoningChainSchema = new Schema<IReasoningChain>({
@@ -558,20 +560,20 @@ reasoningChainSchema.methods.addStep = function(stepData: any, position?: number
   if (position && position <= this.steps.length) {
     // Insert at specific position and renumber subsequent steps
     this.steps.splice(position - 1, 0, newStep);
-    this.steps.forEach((step, index) => {
+    this.steps.forEach((step: IReasoningChain['steps'][0], index: number) => {
       step.stepNumber = index + 1;
     });
   } else {
     this.steps.push(newStep);
   }
-  
+
   return this.save();
 };
 
 reasoningChainSchema.methods.removeStep = function(stepNumber: number) {
-  this.steps = this.steps.filter(step => step.stepNumber !== stepNumber);
+  this.steps = this.steps.filter((step: IReasoningChain['steps'][0]) => step.stepNumber !== stepNumber);
   // Renumber remaining steps
-  this.steps.forEach((step, index) => {
+  this.steps.forEach((step: IReasoningChain['steps'][0], index: number) => {
     step.stepNumber = index + 1;
   });
   return this.save();

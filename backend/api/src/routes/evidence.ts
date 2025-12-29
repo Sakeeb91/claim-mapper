@@ -1620,6 +1620,7 @@ router.post('/:id/annotations',
       text: text.trim(),
       type,
       position,
+      timestamp: new Date(),
       createdAt: new Date(),
     });
 
