@@ -1,7 +1,11 @@
 // Simple logger implementation
 export const logger = {
-  info: (message: string) => console.log(`[INFO] ${message}`),
-  error: (message: string, error?: any) => console.error(`[ERROR] ${message}`, error),
-  warn: (message: string) => console.warn(`[WARN] ${message}`),
-  debug: (message: string) => console.debug(`[DEBUG] ${message}`),
+  info: (message: string, meta?: Record<string, unknown>) =>
+    console.log(`[INFO] ${message}`, meta ? JSON.stringify(meta) : ''),
+  error: (message: string, meta?: Record<string, unknown>) =>
+    console.error(`[ERROR] ${message}`, meta ? JSON.stringify(meta) : ''),
+  warn: (message: string, meta?: Record<string, unknown>) =>
+    console.warn(`[WARN] ${message}`, meta ? JSON.stringify(meta) : ''),
+  debug: (message: string, meta?: Record<string, unknown>) =>
+    console.debug(`[DEBUG] ${message}`, meta ? JSON.stringify(meta) : ''),
 };
