@@ -1493,4 +1493,159 @@ router.post('/:id/review',
   })
 );
 
+/**
+ * GET /api/reasoning/:id/coverage - Get evidence coverage for reasoning chain
+ *
+ * Returns coverage statistics for each premise step, including:
+ * - Number of supporting vs refuting evidence
+ * - Whether the premise has any linked evidence
+ * - Net support score (supporting - refuting)
+ */
+router.get('/:id/coverage',
+  authenticate,
+  validate(validationSchemas.objectId, 'params'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+
+    const reasoningChain = await ReasoningChain.findOne({ _id: id, isActive: true })
+      .populate('project', 'owner collaborators visibility');
+
+    if (!reasoningChain) {
+      throw createError(REASONING_ERROR_MESSAGES.NOT_FOUND, 404, 'REASONING_NOT_FOUND');
+    }
+
+    // Check project access
+    const project = reasoningChain.project as any;
+    const userId = req.user!._id.toString();
+    const hasAccess = project.visibility === 'public' ||
+      project.owner.toString() === userId ||
+      project.collaborators.some((c: any) => c.user.toString() === userId);
+
+    if (!hasAccess) {
+      throw createError(REASONING_ERROR_MESSAGES.ACCESS_DENIED, 403, 'ACCESS_DENIED');
+    }
+
+    // Calculate coverage for each premise step
+    const coverage = reasoningChain.steps
+      .filter((step) => step.type === 'premise')
+      .map((step) => {
+        const linkedEvidence = step.metadata?.linkedEvidence || [];
+
+        const supportCount = linkedEvidence.filter(
+          (e: any) => e.relationship === 'supports' || e.relationship === 'partial_support'
+        ).length;
+
+        const refuteCount = linkedEvidence.filter(
+          (e: any) => e.relationship === 'refutes' || e.relationship === 'partial_refute'
+        ).length;
+
+        const neutralCount = linkedEvidence.filter(
+          (e: any) => e.relationship === 'neutral'
+        ).length;
+
+        return {
+          stepNumber: step.stepNumber,
+          premiseText: step.text,
+          supportCount,
+          refuteCount,
+          neutralCount,
+          hasEvidence: linkedEvidence.length > 0,
+          netSupport: supportCount - refuteCount,
+          totalEvidence: linkedEvidence.length,
+          averageConfidence: linkedEvidence.length > 0
+            ? linkedEvidence.reduce((sum: number, e: any) => sum + (e.confidence || 0), 0) / linkedEvidence.length
+            : 0,
+        };
+      });
+
+    // Calculate summary statistics
+    const summary = {
+      totalPremises: coverage.length,
+      withEvidence: coverage.filter((c) => c.hasEvidence).length,
+      supported: coverage.filter((c) => c.netSupport > 0).length,
+      contested: coverage.filter((c) => c.netSupport < 0).length,
+      mixed: coverage.filter((c) => c.netSupport === 0 && c.hasEvidence).length,
+      noEvidence: coverage.filter((c) => !c.hasEvidence).length,
+    };
+
+    res.json({
+      success: true,
+      data: {
+        chainId: reasoningChain._id,
+        coverage,
+        summary,
+      },
+    });
+  })
+);
+
+/**
+ * GET /api/reasoning/:id/steps/:stepNumber/evidence - Get linked evidence for a specific step
+ *
+ * Returns detailed evidence information for a premise step
+ */
+router.get('/:id/steps/:stepNumber/evidence',
+  authenticate,
+  validate(validationSchemas.objectId, 'params'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id, stepNumber } = req.params;
+
+    const reasoningChain = await ReasoningChain.findOne({ _id: id, isActive: true })
+      .populate('project', 'owner collaborators visibility');
+
+    if (!reasoningChain) {
+      throw createError(REASONING_ERROR_MESSAGES.NOT_FOUND, 404, 'REASONING_NOT_FOUND');
+    }
+
+    // Check project access
+    const project = reasoningChain.project as any;
+    const userId = req.user!._id.toString();
+    const hasAccess = project.visibility === 'public' ||
+      project.owner.toString() === userId ||
+      project.collaborators.some((c: any) => c.user.toString() === userId);
+
+    if (!hasAccess) {
+      throw createError(REASONING_ERROR_MESSAGES.ACCESS_DENIED, 403, 'ACCESS_DENIED');
+    }
+
+    // Find the step
+    const step = reasoningChain.steps.find((s) => s.stepNumber === parseInt(stepNumber, 10));
+
+    if (!step) {
+      throw createError('Step not found', 404, 'STEP_NOT_FOUND');
+    }
+
+    const linkedEvidence = step.metadata?.linkedEvidence || [];
+
+    // Group evidence by relationship
+    const supporting = linkedEvidence.filter(
+      (e: any) => e.relationship === 'supports' || e.relationship === 'partial_support'
+    );
+    const refuting = linkedEvidence.filter(
+      (e: any) => e.relationship === 'refutes' || e.relationship === 'partial_refute'
+    );
+    const neutral = linkedEvidence.filter((e: any) => e.relationship === 'neutral');
+
+    res.json({
+      success: true,
+      data: {
+        stepNumber: step.stepNumber,
+        premiseText: step.text,
+        linkedEvidence,
+        grouped: {
+          supporting,
+          refuting,
+          neutral,
+        },
+        stats: {
+          total: linkedEvidence.length,
+          supportCount: supporting.length,
+          refuteCount: refuting.length,
+          neutralCount: neutral.length,
+        },
+      },
+    });
+  })
+);
+
 export default router;
