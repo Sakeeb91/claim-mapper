@@ -300,17 +300,17 @@ class RedisManager {
   }
 
   // User Activity Tracking
-  async trackUserActivity(userId: string, activity: any): Promise<void> {
+  async trackUserActivity(userId: string, activity: Omit<UserActivity, 'timestamp'>): Promise<void> {
     try {
       const activityKey = `activity:${userId}`;
-      const activities = await this.get(activityKey) || [];
+      const activities = await this.get<UserActivity[]>(activityKey) || [];
       activities.push({ ...activity, timestamp: new Date() });
-      
+
       // Keep only last 100 activities
       if (activities.length > 100) {
         activities.splice(0, activities.length - 100);
       }
-      
+
       await this.set(activityKey, activities, 86400); // 24 hours
     } catch (error) {
       logger.error('Error tracking user activity:', error);
@@ -318,10 +318,10 @@ class RedisManager {
     }
   }
 
-  async getUserActivity(userId: string): Promise<any[]> {
+  async getUserActivity(userId: string): Promise<UserActivity[]> {
     try {
       const activityKey = `activity:${userId}`;
-      return await this.get(activityKey) || [];
+      return await this.get<UserActivity[]>(activityKey) || [];
     } catch (error) {
       logger.error('Error getting user activity:', error);
       return [];
