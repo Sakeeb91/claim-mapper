@@ -7,11 +7,13 @@ import Project from '../models/Project';
 import User from '../models/User';
 import Claim from '../models/Claim';
 import Evidence from '../models/Evidence';
+import EmailLog from '../models/EmailLog';
 import { authenticate, requireRole } from '../middleware/auth';
 import { validate, validationSchemas, sanitize, validatePagination, validateFile } from '../middleware/validation';
 import { asyncHandler, createError } from '../middleware/errorHandler';
 import redisManager from '../config/redis';
 import { logger } from '../utils/logger';
+import { sendEmail, renderInvitationEmail } from '../services/email';
 
 const router = express.Router();
 
@@ -363,14 +365,54 @@ router.post('/:id/collaborators',
     
     // Add collaborator
     await project.addCollaborator(userToInvite._id.toString(), role, userId);
-    
+
     // Re-populate
     await project.populate('collaborators.user', 'firstName lastName email');
-    
-    // TODO: Send invitation email
-    // await sendInvitationEmail(userToInvite.email, project.name, message);
-    
-    logger.info(`Collaborator invited: ${userToInvite.email} to project ${project._id}`);
+
+    // Send invitation email
+    const inviteUrl = `${process.env.FRONTEND_URL}/projects/${project._id}`;
+    const emailHtml = renderInvitationEmail({
+      projectName: project.name,
+      inviterName: `${req.user!.firstName} ${req.user!.lastName}`,
+      inviteUrl,
+      role,
+      message,
+    });
+
+    const emailResult = await sendEmail(
+      userToInvite.email,
+      `Invitation to collaborate on "${project.name}" - Claim Mapper`,
+      emailHtml,
+      {
+        metadata: {
+          userId: userToInvite._id.toString(),
+          projectId: project._id.toString(),
+          type: 'invitation',
+        },
+      }
+    );
+
+    // Log email for tracking
+    if (emailResult.queued) {
+      await EmailLog.create({
+        to: userToInvite.email,
+        from: process.env.FROM_EMAIL || 'noreply@claimmapper.com',
+        subject: `Invitation to collaborate on "${project.name}" - Claim Mapper`,
+        type: 'invitation',
+        status: 'queued',
+        jobId: emailResult.jobId,
+        userId: userToInvite._id,
+        projectId: project._id,
+        metadata: {
+          inviterId: userId,
+          role,
+        },
+      });
+    }
+
+    logger.info(`Collaborator invited: ${userToInvite.email} to project ${project._id}`, {
+      emailQueued: emailResult.queued,
+    });
     
     res.status(201).json({
       success: true,
