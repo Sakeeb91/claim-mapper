@@ -2,6 +2,7 @@ import express from 'express';
 import { Request, Response } from 'express';
 import Session from '../models/Session';
 import Project from '../models/Project';
+import Claim from '../models/Claim';
 import { authenticate, requireProjectAccess } from '../middleware/auth';
 import { validate, validationSchemas, validatePagination } from '../middleware/validation';
 import { asyncHandler, createError } from '../middleware/errorHandler';
@@ -104,6 +105,68 @@ router.get('/sessions',
       success: true,
       data: sessions,
       pagination,
+    });
+  })
+);
+
+// GET /api/collaboration/comments/:claimId - Get comment history for a claim
+router.get('/comments/:claimId',
+  authenticate,
+  validate(validationSchemas.objectId, 'params'),
+  validatePagination,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { claimId } = req.params;
+    const { page = 1, limit = 20 } = req.query;
+    const userId = req.user!._id.toString();
+
+    // Find claim and verify access
+    const claim = await Claim.findOne({ _id: claimId, isActive: true })
+      .populate('project', 'owner collaborators visibility settings')
+      .populate('comments.user', 'firstName lastName email avatar')
+      .populate('comments.replies.user', 'firstName lastName email avatar');
+
+    if (!claim) {
+      throw createError('Claim not found', 404, 'CLAIM_NOT_FOUND');
+    }
+
+    // Check project access
+    const project = claim.project as any;
+    const hasAccess = project.owner.toString() === userId ||
+      project.collaborators.some((c: any) => c.user.toString() === userId) ||
+      project.visibility === 'public';
+
+    if (!hasAccess) {
+      throw createError('Access denied to claim', 403, 'CLAIM_ACCESS_DENIED');
+    }
+
+    // Get comments with pagination (comments are embedded, so pagination is manual)
+    const allComments = claim.comments || [];
+    const total = allComments.length;
+    const skip = (Number(page) - 1) * Number(limit);
+
+    // Sort by timestamp (newest first) and paginate
+    const sortedComments = [...allComments].sort((a, b) =>
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+    const paginatedComments = sortedComments.slice(skip, skip + Number(limit));
+
+    const pagination = {
+      page: Number(page),
+      limit: Number(limit),
+      total,
+      totalPages: Math.ceil(total / Number(limit)),
+      hasNext: Number(page) < Math.ceil(total / Number(limit)),
+      hasPrev: Number(page) > 1,
+    };
+
+    res.json({
+      success: true,
+      data: paginatedComments,
+      pagination,
+      meta: {
+        claimId,
+        unresolvedCount: allComments.filter(c => !c.resolved).length,
+      },
     });
   })
 );
