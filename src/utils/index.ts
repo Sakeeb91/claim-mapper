@@ -1,6 +1,10 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
+// Re-export logger utility
+export { logger, Logger, ChildLogger } from './logger';
+export type { LogLevel, LogContext } from './logger';
+
 // Utility for merging Tailwind classes
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -149,11 +153,16 @@ export function getFromStorage<T>(key: string, defaultValue: T): T {
 
 export function setInStorage<T>(key: string, value: T): void {
   if (typeof window === 'undefined') return;
-  
+
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch (error) {
-    console.error('Failed to save to localStorage:', error);
+    logger.error('Failed to save to localStorage', {
+      component: 'Storage',
+      action: 'storage_write',
+      error: error instanceof Error ? error : String(error),
+      key,
+    });
   }
 }
 
