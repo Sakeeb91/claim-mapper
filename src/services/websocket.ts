@@ -1,5 +1,10 @@
 import { io, Socket } from 'socket.io-client';
 import { useAppStore } from '@/store/useAppStore';
+import { logger } from '@/utils/logger';
+import { LOG_COMPONENTS, LOG_ACTIONS } from '@/constants/logging';
+
+// Create child logger for WebSocket service
+const wsLogger = logger.child({ component: LOG_COMPONENTS.WEBSOCKET });
 
 export class WebSocketService {
   private socket: Socket | null = null;
@@ -40,7 +45,7 @@ export class WebSocketService {
     if (this.socket?.connected) {
       this.socket.emit(event, data);
     } else {
-      console.warn('Socket not connected, cannot emit event:', event);
+      wsLogger.warn('Socket not connected, cannot emit event', { event });
     }
   }
 
@@ -73,15 +78,15 @@ export class WebSocketService {
 
     // Connection events
     this.socket.on('connect', () => {
-      console.log('WebSocket connected');
+      wsLogger.info('Connected', { action: LOG_ACTIONS.CONNECT });
       this.reconnectAttempts = 0;
       store.setConnectionStatus(true, false);
     });
 
     this.socket.on('disconnect', (reason) => {
-      console.log('WebSocket disconnected:', reason);
+      wsLogger.info('Disconnected', { action: LOG_ACTIONS.DISCONNECT, reason });
       store.setConnectionStatus(false, false);
-      
+
       if (reason === 'io client disconnect') {
         // Manual disconnect, don't reconnect
         return;
@@ -92,24 +97,36 @@ export class WebSocketService {
     });
 
     this.socket.on('connect_error', (error) => {
-      console.error('WebSocket connection error:', error);
+      wsLogger.error('Connection error', {
+        action: LOG_ACTIONS.CONNECTION_ERROR,
+        error: error instanceof Error ? error : String(error),
+      });
       store.setConnectionStatus(false, false);
       this.handleReconnection();
     });
 
     this.socket.on('reconnect', (attemptNumber) => {
-      console.log('WebSocket reconnected after', attemptNumber, 'attempts');
+      wsLogger.info('Reconnected', {
+        action: LOG_ACTIONS.RECONNECT,
+        attemptNumber,
+      });
       this.reconnectAttempts = 0;
       store.setConnectionStatus(true, false);
     });
 
     this.socket.on('reconnect_attempt', (attemptNumber) => {
-      console.log('WebSocket reconnection attempt:', attemptNumber);
+      wsLogger.info('Reconnection attempt', {
+        action: LOG_ACTIONS.RECONNECT_ATTEMPT,
+        attemptNumber,
+      });
       store.setConnectionStatus(false, true);
     });
 
     this.socket.on('reconnect_failed', () => {
-      console.error('WebSocket reconnection failed after max attempts');
+      wsLogger.error('Reconnection failed after max attempts', {
+        action: LOG_ACTIONS.RECONNECT_ATTEMPT,
+        maxAttempts: this.maxReconnectAttempts,
+      });
       store.setConnectionStatus(false, false);
       store.setError('Connection lost. Please refresh the page.');
     });
@@ -278,33 +295,43 @@ export class WebSocketService {
 
     this.socket.on('session_chat', (data) => {
       // Handle chat messages if needed
-      console.log('Chat message:', data);
+      wsLogger.debug('Chat message received', { messageId: data?.id });
     });
 
     // Error handling
     this.socket.on('error', (data) => {
-      console.error('WebSocket error:', data);
+      wsLogger.error('WebSocket error', {
+        error: data?.message || 'Unknown error',
+        code: data?.code,
+      });
       store.setError(data.message || 'An error occurred');
     });
 
     // Ping/pong for connection health
     this.socket.on('pong', (data) => {
       // Connection is healthy
-      console.debug('Pong received:', data);
+      wsLogger.debug('Pong received', { latency: data?.latency });
     });
   }
 
   private handleReconnection() {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.error('Max reconnection attempts reached');
+      wsLogger.error('Max reconnection attempts reached', {
+        action: LOG_ACTIONS.RECONNECT_ATTEMPT,
+        maxAttempts: this.maxReconnectAttempts,
+      });
       return;
     }
 
     this.reconnectAttempts++;
     const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
-    
-    console.log(`Attempting to reconnect in ${delay}ms (attempt ${this.reconnectAttempts})`);
-    
+
+    wsLogger.info('Scheduling reconnection attempt', {
+      action: LOG_ACTIONS.RECONNECT_ATTEMPT,
+      delayMs: delay,
+      attempt: this.reconnectAttempts,
+    });
+
     setTimeout(() => {
       if (this.socket && !this.socket.connected) {
         this.socket.connect();
