@@ -1,6 +1,11 @@
 import axios from 'axios';
+import { logger } from '@/utils/logger';
+import { LOG_COMPONENTS, LOG_ACTIONS } from '@/constants/logging';
 
 const ML_API_BASE = 'http://localhost:8002';
+
+// Create child logger for ML API service
+const mlLogger = logger.child({ component: LOG_COMPONENTS.ML_API });
 
 export const mlApi = {
   extractClaims: async (text: string) => {
@@ -11,7 +16,11 @@ export const mlApi = {
       });
       return response.data;
     } catch (error) {
-      console.error('Error extracting claims:', error);
+      mlLogger.error('Error extracting claims', {
+        action: LOG_ACTIONS.EXTRACT_CLAIMS,
+        error: error instanceof Error ? error : String(error),
+        textLength: text.length,
+      });
       return [];
     }
   },
@@ -23,7 +32,11 @@ export const mlApi = {
       });
       return response.data;
     } catch (error) {
-      console.error('Error analyzing claim:', error);
+      mlLogger.error('Error analyzing claim', {
+        action: LOG_ACTIONS.ANALYZE_CLAIM,
+        error: error instanceof Error ? error : String(error),
+        claimTextLength: claimText.length,
+      });
       return null;
     }
   },
@@ -35,7 +48,11 @@ export const mlApi = {
       });
       return response.data;
     } catch (error) {
-      console.error('Error finding similar claims:', error);
+      mlLogger.error('Error finding similar claims', {
+        action: LOG_ACTIONS.FIND_SIMILAR,
+        error: error instanceof Error ? error : String(error),
+        claimTextLength: claimText.length,
+      });
       return { similar_claims: [] };
     }
   },
@@ -45,7 +62,10 @@ export const mlApi = {
       const response = await axios.get(`${ML_API_BASE}/health`);
       return response.data;
     } catch (error) {
-      console.error('ML service health check failed:', error);
+      mlLogger.error('ML service health check failed', {
+        action: LOG_ACTIONS.HEALTH_CHECK,
+        error: error instanceof Error ? error : String(error),
+      });
       return { status: 'unhealthy' };
     }
   }
