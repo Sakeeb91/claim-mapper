@@ -313,112 +313,74 @@ export const useAppStore = create<AppState & AppActions>()(
         }
       },
 
-      loadGraphData: async (claimId) => {
+      loadGraphData: async (claimIdOrProjectId) => {
         set({ loading: true, error: null });
+
         try {
-          // TODO: Implement API call
-          console.log('Loading graph data for claim:', claimId);
-          
-          // Mock data for development
-          const mockGraphData = {
-            nodes: [
-              {
-                id: '1',
-                type: 'claim' as const,
-                label: 'Climate change is real',
-                size: 20,
-                color: '#3b82f6',
-                confidence: 0.9,
-                data: {
-                  id: '1',
-                  text: 'Climate change is a real and pressing issue backed by scientific consensus.',
-                  type: 'assertion' as const,
-                  confidence: 0.9,
-                  createdAt: new Date(),
-                  updatedAt: new Date(),
-                  tags: ['climate', 'science'],
-                  evidence: [],
-                  reasoning: []
-                }
-              },
-              {
-                id: '2',
-                type: 'evidence' as const,
-                label: 'NASA temperature data',
-                size: 15,
-                color: '#10b981',
-                data: {
-                  id: '2',
-                  text: 'NASA satellite data shows consistent global temperature increases over the past decades.',
-                  type: 'supporting' as const,
-                  source: 'NASA',
-                  reliability: 0.95,
-                  claimId: '1',
-                  createdAt: new Date()
-                }
-              },
-              {
-                id: '3',
-                type: 'reasoning' as const,
-                label: 'Scientific consensus analysis',
-                size: 18,
-                color: '#8b5cf6',
-                data: {
-                  id: '3',
-                  steps: [
-                    {
-                      id: '3a',
-                      text: 'Multiple independent studies show temperature increases',
-                      order: 1,
-                      type: 'premise' as const,
-                      confidence: 0.9
-                    },
-                    {
-                      id: '3b',
-                      text: 'The pattern is consistent with greenhouse gas models',
-                      order: 2,
-                      type: 'inference' as const,
-                      confidence: 0.85
-                    },
-                    {
-                      id: '3c',
-                      text: 'Therefore, human-caused climate change is occurring',
-                      order: 3,
-                      type: 'conclusion' as const,
-                      confidence: 0.88
-                    }
-                  ],
-                  claimId: '1',
-                  type: 'deductive' as const,
-                  createdAt: new Date()
-                }
-              }
-            ],
-            links: [
-              {
-                id: 'l1',
-                source: '2',
-                target: '1',
-                type: 'supports' as const,
-                strength: 0.8,
-                label: 'supports'
-              },
-              {
-                id: 'l2',
-                source: '3',
-                target: '1',
-                type: 'reasoning' as const,
-                strength: 0.9,
-                label: 'reasoning for'
-              }
-            ]
-          };
-          
-          set({ graphData: mockGraphData });
+          let graphResponse;
+          const { graphFilters, currentProjectId } = get();
+
+          // Determine if we're loading by claim ID or project ID
+          if (claimIdOrProjectId) {
+            // Check if it looks like a claim-specific request (MongoDB ObjectId)
+            const isClaimId = /^[0-9a-fA-F]{24}$/.test(claimIdOrProjectId);
+
+            if (isClaimId) {
+              // Load graph centered on a specific claim
+              graphResponse = await GraphApiService.getClaimGraph(
+                claimIdOrProjectId,
+                2, // maxDepth
+                true // includeEvidence
+              );
+            } else {
+              // Treat as projectId
+              set({ currentProjectId: claimIdOrProjectId });
+              graphResponse = await GraphApiService.getGraphData({
+                projectId: claimIdOrProjectId,
+                includeEvidence: true,
+                includeReasoning: false,
+                limit: 500,
+              });
+            }
+          } else if (currentProjectId) {
+            // Reload current project's graph
+            graphResponse = await GraphApiService.getGraphData({
+              projectId: currentProjectId,
+              includeEvidence: true,
+              includeReasoning: false,
+              limit: 500,
+            });
+          } else {
+            // No project or claim specified - load all accessible data
+            graphResponse = await GraphApiService.getGraphData({
+              includeEvidence: true,
+              limit: 500,
+            });
+          }
+
+          // Normalize and set graph data
+          const normalizedData = GraphApiService.normalizeGraphData(graphResponse);
+
+          set({
+            graphData: normalizedData,
+            graphMetrics: graphResponse.metrics,
+            loading: false,
+          });
+
+          // Apply current filters if any
+          if (graphFilters) {
+            const { applyGraphFilters } = get();
+            applyGraphFilters(graphFilters);
+          }
+
         } catch (error) {
-          set({ error: error instanceof Error ? error.message : 'Failed to load graph' });
-        } finally {
-          set({ loading: false });
+          const errorMessage = error instanceof Error
+            ? error.message
+            : (error as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Failed to load graph';
+          set({
+            error: errorMessage,
+            loading: false,
+          });
         }
       },
       
