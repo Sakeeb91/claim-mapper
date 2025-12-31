@@ -394,32 +394,74 @@ export const useAppStore = create<AppState & AppActions>()(
       },
       
       connectNodes: async (sourceId, targetId, type) => {
-        set({ loading: true, error: null });
+        const { graphData, socket, currentProjectId } = get();
+
+        // Create optimistic link with temp ID
+        const tempLinkId = `temp_link_${Date.now()}`;
+        const optimisticLink = ClaimsApiService.toGraphLink(
+          sourceId,
+          targetId,
+          type as 'supports' | 'contradicts' | 'relates' | 'questions' | 'elaborates' | 'similar',
+          0.8, // Default confidence
+          tempLinkId
+        );
+
+        // Store original links for potential rollback
+        const originalLinks = [...graphData.links];
+
+        // Optimistic update - add the link immediately for instant UX
+        set({
+          graphData: {
+            ...graphData,
+            links: [...graphData.links, optimisticLink],
+          },
+        });
+
         try {
-          // TODO: Implement API call to create connection
-          console.log('Connecting nodes:', sourceId, '->', targetId, 'as', type);
-          
-          // Update local graph data optimistically
-          const { graphData } = get();
-          const newLink = {
-            id: `link_${Date.now()}`,
-            source: sourceId,
-            target: targetId,
-            type: type as any,
-            strength: 0.7,
-            label: type
-          };
-          
+          // Call API to create the relationship
+          await ClaimsApiService.connectClaims(
+            sourceId,
+            targetId,
+            type as 'supports' | 'contradicts' | 'relates' | 'questions' | 'elaborates' | 'similar',
+            0.8 // Default confidence
+          );
+
+          // Replace temp link with confirmed link (update ID if needed)
+          const confirmedLinks = get().graphData.links.map(link =>
+            link.id === tempLinkId
+              ? { ...link, id: `link_${sourceId}_${targetId}_${Date.now()}` }
+              : link
+          );
+
+          set({
+            graphData: {
+              ...get().graphData,
+              links: confirmedLinks,
+            },
+          });
+
+          // Emit WebSocket event for real-time collaboration
+          if (socket && socket.connected) {
+            socket.emit('relationship_created', {
+              projectId: currentProjectId,
+              sourceId,
+              targetId,
+              relationship: type,
+              link: optimisticLink,
+            });
+          }
+
+        } catch (error) {
+          // Rollback optimistic update on error
           set({
             graphData: {
               ...graphData,
-              links: [...graphData.links, newLink]
-            }
+              links: originalLinks,
+            },
+            error: error instanceof Error
+              ? error.message
+              : (error as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Failed to connect nodes',
           });
-        } catch (error) {
-          set({ error: error instanceof Error ? error.message : 'Failed to connect nodes' });
-        } finally {
-          set({ loading: false });
         }
       },
       
