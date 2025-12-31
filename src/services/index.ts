@@ -11,3 +11,5 @@ export * from './api';
 export * from './websocket';
 export * from './mlApi';
 export * from './searchApi';
+export * from './graphApi';
+export * from './claimsApi';
