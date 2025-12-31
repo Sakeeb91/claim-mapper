@@ -283,4 +283,69 @@ router.post('/comments',
   })
 );
 
+// GET /api/collaboration/versions/:claimId - Get version history for a claim
+router.get('/versions/:claimId',
+  authenticate,
+  validate(validationSchemas.objectId, 'params'),
+  validatePagination,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { claimId } = req.params;
+    const { page = 1, limit = 20 } = req.query;
+    const userId = req.user!._id.toString();
+
+    // Find claim and verify access
+    const claim = await Claim.findOne({ _id: claimId, isActive: true })
+      .populate('project', 'owner collaborators visibility settings')
+      .populate('versions.changedBy', 'firstName lastName email');
+
+    if (!claim) {
+      throw createError('Claim not found', 404, 'CLAIM_NOT_FOUND');
+    }
+
+    // Check project access
+    const project = claim.project as any;
+    const hasAccess = project.owner.toString() === userId ||
+      project.collaborators.some((c: any) => c.user.toString() === userId) ||
+      project.visibility === 'public';
+
+    if (!hasAccess) {
+      throw createError('Access denied to claim', 403, 'CLAIM_ACCESS_DENIED');
+    }
+
+    // Check if versioning is enabled
+    if (!project.settings?.collaboration?.allowVersioning) {
+      throw createError('Version history is not enabled on this project', 403, 'VERSIONING_DISABLED');
+    }
+
+    // Get versions with pagination
+    const allVersions = claim.versions || [];
+    const total = allVersions.length;
+    const skip = (Number(page) - 1) * Number(limit);
+
+    // Sort by version number (newest first) and paginate
+    const sortedVersions = [...allVersions].sort((a, b) => b.versionNumber - a.versionNumber);
+    const paginatedVersions = sortedVersions.slice(skip, skip + Number(limit));
+
+    const pagination = {
+      page: Number(page),
+      limit: Number(limit),
+      total,
+      totalPages: Math.ceil(total / Number(limit)),
+      hasNext: Number(page) < Math.ceil(total / Number(limit)),
+      hasPrev: Number(page) > 1,
+    };
+
+    res.json({
+      success: true,
+      data: paginatedVersions,
+      pagination,
+      meta: {
+        claimId,
+        currentVersion: allVersions.length,
+        currentText: claim.text,
+      },
+    });
+  })
+);
+
 export default router;
