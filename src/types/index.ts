@@ -251,6 +251,24 @@ export interface PaginatedResponse<T> extends ApiResponse<T[]> {
   };
 }
 
+// Graph metrics from API
+export interface GraphMetrics {
+  nodeCount: number;
+  linkCount: number;
+  density: number;
+  averageDegree: number;
+  clusters: number;
+  claimCount?: number;
+  evidenceCount?: number;
+}
+
+// Search facets from API
+export interface SearchFacetsResult {
+  types: Record<string, number>;
+  status: Record<string, number>;
+  tags: Array<{ name: string; count: number }>;
+}
+
 // Store types
 export interface AppState {
   claims: Claim[];
@@ -276,6 +294,13 @@ export interface AppState {
   reconnecting: boolean;
   editingClaim: string | null;
   notifications: Notification[];
+  // Search state
+  searchResults: SearchResult[];
+  searchFacets: SearchFacetsResult | null;
+  searchHistory: string[];
+  // Graph state
+  graphMetrics: GraphMetrics | null;
+  currentProjectId: string | null;
 }
 
 export interface Notification {
