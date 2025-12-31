@@ -249,7 +249,7 @@ router.post('/comments',
     await claim.save();
     await claim.populate('comments.user', 'firstName lastName email avatar');
 
-    const newComment = claim.comments[claim.comments.length - 1];
+    const newComment = claim.comments[claim.comments.length - 1] as any;
 
     // Clear related caches
     await redisManager.deletePattern(`collaboration:comments:${claimId}:*`);
@@ -258,7 +258,7 @@ router.post('/comments',
     await redisManager.trackUserActivity(userId, {
       action: 'add_comment',
       claimId,
-      details: { commentId: newComment._id?.toString() },
+      details: { commentId: newComment?._id?.toString() || 'unknown' },
     });
 
     logger.info(`Comment added to claim ${claimId} by ${req.user!.email}`);

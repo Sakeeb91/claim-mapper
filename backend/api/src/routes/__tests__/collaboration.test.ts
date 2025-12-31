@@ -278,7 +278,7 @@ describe('Collaboration API', () => {
   describe('Add Comment', () => {
     it('should validate comment text is required', () => {
       const text = '';
-      const isValid = text && text.trim().length > 0;
+      const isValid = text.length > 0 && text.trim().length > 0;
 
       expect(isValid).toBe(false);
     });
