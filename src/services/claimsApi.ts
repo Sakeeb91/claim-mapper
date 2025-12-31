@@ -121,9 +121,17 @@ export class ClaimsApiService {
     };
   }> {
     const response = await apiService.getPaginated<Claim>('/api/claims', params);
+    const { page, limit, total, totalPages } = response.pagination;
     return {
       claims: response.data,
-      pagination: response.pagination,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNext: page < totalPages,
+        hasPrev: page > 1,
+      },
     };
   }
 
