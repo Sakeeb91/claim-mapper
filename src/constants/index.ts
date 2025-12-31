@@ -4,6 +4,7 @@
 
 export * from './api';
 export * from './graph';
+export * from './logging';
 export * from './routes';
 export * from './validation';
 
