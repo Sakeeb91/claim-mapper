@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useState, useEffect, Suspense } from 'react';
-import { 
-  Search as SearchIcon, 
-  Filter, 
-  Save, 
+import {
+  Search as SearchIcon,
+  Filter,
+  Save,
   TrendingUp,
   X,
   Sparkles,
@@ -21,6 +21,11 @@ import { useSearch, useSemanticSearch, useSavedSearches } from '@/hooks/useSearc
 import { useSearchStore } from '@/store/searchStore';
 import { SearchQuery, SearchResult, SavedSearch } from '@/types/search';
 import { SearchService } from '@/services/searchApi';
+import { logger } from '@/utils/logger';
+import { LOG_COMPONENTS, LOG_ACTIONS } from '@/constants/logging';
+
+// Create child logger for search page
+const searchLogger = logger.child({ component: LOG_COMPONENTS.SEARCH_PAGE });
 
 function SearchPageContent() {
   const router = useRouter();
@@ -101,7 +106,11 @@ function SearchPageContent() {
           const urlFilters = JSON.parse(decodeURIComponent(filtersParam));
           searchQuery.filters = { ...searchQuery.filters, ...urlFilters };
         } catch (e) {
-          console.warn('Failed to parse URL filters:', e);
+          searchLogger.warn('Failed to parse URL filters', {
+            action: LOG_ACTIONS.FILTER,
+            error: e instanceof Error ? e : String(e),
+            filtersParam,
+          });
         }
       }
 
@@ -188,7 +197,11 @@ function SearchPageContent() {
       setSaveSearchName('');
       setSaveSearchDescription('');
     } catch (error) {
-      console.error('Failed to save search:', error);
+      searchLogger.error('Failed to save search', {
+        action: LOG_ACTIONS.SAVE,
+        error: error instanceof Error ? error : String(error),
+        searchName: saveSearchName,
+      });
     }
   };
 
@@ -208,7 +221,11 @@ function SearchPageContent() {
       a.click();
       URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Export failed:', error);
+      searchLogger.error('Export failed', {
+        action: LOG_ACTIONS.EXPORT,
+        error: error instanceof Error ? error : String(error),
+        resultCount: results.length,
+      });
     }
   };
 
@@ -216,9 +233,19 @@ function SearchPageContent() {
     try {
       const similar = await getSimilarContent(result.id, result.type);
       // Handle similar results display
-      console.log('Similar results:', similar);
+      searchLogger.debug('Similar results retrieved', {
+        action: LOG_ACTIONS.FIND_SIMILAR,
+        resultId: result.id,
+        resultType: result.type,
+        similarCount: similar?.length ?? 0,
+      });
     } catch (error) {
-      console.error('Failed to get similar results:', error);
+      searchLogger.error('Failed to get similar results', {
+        action: LOG_ACTIONS.FIND_SIMILAR,
+        error: error instanceof Error ? error : String(error),
+        resultId: result.id,
+        resultType: result.type,
+      });
     }
   };
 
