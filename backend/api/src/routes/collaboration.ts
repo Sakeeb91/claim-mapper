@@ -348,4 +348,107 @@ router.get('/versions/:claimId',
   })
 );
 
+// POST /api/collaboration/versions/:claimId/revert - Revert to a specific version
+router.post('/versions/:claimId/revert',
+  authenticate,
+  validate(validationSchemas.objectId, 'params'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { claimId } = req.params;
+    const { versionNumber } = req.body;
+    const userId = req.user!._id.toString();
+
+    // Validate version number
+    if (!versionNumber || typeof versionNumber !== 'number' || versionNumber < 1) {
+      throw createError('Valid version number is required', 400, 'VERSION_NUMBER_REQUIRED');
+    }
+
+    // Find claim and verify access
+    const claim = await Claim.findOne({ _id: claimId, isActive: true })
+      .populate('project', 'owner collaborators visibility settings');
+
+    if (!claim) {
+      throw createError('Claim not found', 404, 'CLAIM_NOT_FOUND');
+    }
+
+    // Check project access and edit permissions
+    const project = claim.project as any;
+    const isOwner = project.owner.toString() === userId;
+    const collaborator = project.collaborators.find(
+      (c: any) => c.user.toString() === userId
+    );
+    const canEdit = isOwner || (collaborator && collaborator.permissions.canEdit);
+
+    if (!canEdit) {
+      throw createError('No permission to edit this claim', 403, 'EDIT_PERMISSION_DENIED');
+    }
+
+    // Check if versioning is enabled
+    if (!project.settings?.collaboration?.allowVersioning) {
+      throw createError('Version history is not enabled on this project', 403, 'VERSIONING_DISABLED');
+    }
+
+    // Find the target version
+    const targetVersion = claim.versions.find(v => v.versionNumber === versionNumber);
+
+    if (!targetVersion) {
+      throw createError('Version not found', 404, 'VERSION_NOT_FOUND');
+    }
+
+    // Store current state as a new version before reverting
+    const currentVersionNumber = claim.versions.length > 0
+      ? Math.max(...claim.versions.map(v => v.versionNumber)) + 1
+      : 1;
+
+    claim.versions.push({
+      versionNumber: currentVersionNumber,
+      text: claim.text,
+      changedBy: req.user!._id,
+      changeReason: `Reverted to version ${versionNumber}`,
+      timestamp: new Date(),
+    });
+
+    // Apply the target version's text
+    claim.text = targetVersion.text;
+
+    await claim.save();
+
+    // Clear related caches
+    await redisManager.deletePattern('claims:*');
+    await redisManager.deletePattern(`collaboration:versions:${claimId}:*`);
+
+    // Track activity
+    await redisManager.trackUserActivity(userId, {
+      action: 'revert_version',
+      claimId,
+      details: {
+        fromVersion: currentVersionNumber - 1,
+        toVersion: versionNumber,
+      },
+    });
+
+    logger.info(`Claim ${claimId} reverted to version ${versionNumber} by ${req.user!.email}`);
+
+    // Re-populate for response
+    await claim.populate([
+      { path: 'creator', select: 'firstName lastName email' },
+      { path: 'project', select: 'name' },
+      { path: 'versions.changedBy', select: 'firstName lastName email' },
+    ]);
+
+    res.json({
+      success: true,
+      message: `Successfully reverted to version ${versionNumber}`,
+      data: {
+        claim: {
+          _id: claim._id,
+          text: claim.text,
+          currentVersion: claim.versions.length,
+        },
+        revertedFrom: currentVersionNumber - 1,
+        revertedTo: versionNumber,
+      },
+    });
+  })
+);
+
 export default router;
