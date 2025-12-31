@@ -31,6 +31,17 @@ export const ERROR_MESSAGES = {
   INTERNAL_SERVER_ERROR: 'Internal server error',
   SERVICE_UNAVAILABLE: 'Service temporarily unavailable',
   RATE_LIMIT_EXCEEDED: 'Rate limit exceeded',
+
+  // Email errors
+  EMAIL_SEND_FAILED: 'Failed to send email',
+  EMAIL_SERVICE_UNAVAILABLE: 'Email service is currently unavailable',
+  EMAIL_INVALID_ADDRESS: 'Invalid email address',
+  EMAIL_QUEUE_FAILED: 'Failed to queue email',
+
+  // Password reset errors
+  RESET_TOKEN_EXPIRED: 'Password reset token has expired',
+  RESET_TOKEN_INVALID: 'Invalid password reset token',
+  PASSWORD_RESET_FAILED: 'Failed to reset password',
 } as const;
 
 export const ERROR_CODES = {
@@ -62,4 +73,15 @@ export const ERROR_CODES = {
   INTERNAL_SERVER_ERROR: 9000,
   SERVICE_UNAVAILABLE: 9001,
   RATE_LIMIT_EXCEEDED: 9002,
+
+  // Email (6000-6999)
+  EMAIL_SEND_FAILED: 6000,
+  EMAIL_SERVICE_UNAVAILABLE: 6001,
+  EMAIL_INVALID_ADDRESS: 6002,
+  EMAIL_QUEUE_FAILED: 6003,
+
+  // Password Reset (7000-7999)
+  RESET_TOKEN_EXPIRED: 7000,
+  RESET_TOKEN_INVALID: 7001,
+  PASSWORD_RESET_FAILED: 7002,
 } as const;
