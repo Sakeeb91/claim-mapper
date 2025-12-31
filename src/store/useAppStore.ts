@@ -192,11 +192,49 @@ export const useAppStore = create<AppState & AppActions>()(
       // Search
       setSearchQuery: (query) => set({ searchQuery: query }),
       setFilters: (filters) => set({ filters }),
+      setSearchResults: (results) => set({ searchResults: results }),
+      setSearchFacets: (facets) => set({ searchFacets: facets }),
+      addToSearchHistory: (query) => {
+        const { searchHistory } = get();
+        // Avoid duplicates, keep most recent 20 searches
+        const filtered = searchHistory.filter(q => q !== query);
+        set({ searchHistory: [query, ...filtered].slice(0, 20) });
+      },
+      clearSearchHistory: () => set({ searchHistory: [] }),
 
       // Graph
       setGraphData: (data) => set({ graphData: data }),
       setGraphFilters: (filters) => set({ graphFilters: filters }),
       setGraphLayout: (layout) => set({ graphLayout: layout }),
+      setGraphMetrics: (metrics) => set({ graphMetrics: metrics }),
+      setCurrentProjectId: (projectId) => set({ currentProjectId: projectId }),
+      applyGraphFilters: (filters) => {
+        // Apply filters to the current graph data
+        const { graphData } = get();
+        const filteredNodes = graphData.nodes.filter(node => {
+          // Filter by node type
+          if (!filters.nodeTypes.includes(node.type)) return false;
+          // Filter by confidence range
+          const confidence = node.confidence ?? 0.5;
+          if (confidence < filters.confidenceRange[0] || confidence > filters.confidenceRange[1]) {
+            return false;
+          }
+          return true;
+        });
+        const filteredNodeIds = new Set(filteredNodes.map(n => n.id));
+        const filteredLinks = graphData.links.filter(link => {
+          const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
+          const targetId = typeof link.target === 'object' ? link.target.id : link.target;
+          // Filter by link type and ensure both nodes exist
+          return filters.linkTypes.includes(link.type) &&
+                 filteredNodeIds.has(sourceId) &&
+                 filteredNodeIds.has(targetId);
+        });
+        set({
+          graphFilters: filters,
+          graphData: { nodes: filteredNodes, links: filteredLinks }
+        });
+      },
 
       // UI State
       setLoading: (loading) => set({ loading }),
