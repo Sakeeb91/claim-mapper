@@ -10,8 +10,13 @@ import {
   SearchAnalytics,
   SearchPreferences
 } from '@/types/search';
+import { logger } from '@/utils/logger';
+import { LOG_COMPONENTS } from '@/constants/logging';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
+// Create child logger for Search API
+const searchApiLogger = logger.child({ component: LOG_COMPONENTS.SEARCH_API });
 
 // Create axios instance with interceptors
 const searchApi = axios.create({
@@ -32,7 +37,11 @@ searchApi.interceptors.request.use((config) => {
 searchApi.interceptors.response.use(
   (response) => response,
   (error) => {
-    console.error('Search API Error:', error);
+    searchApiLogger.error('Search API Error', {
+      error: error instanceof Error ? error : String(error),
+      status: error?.response?.status,
+      url: error?.config?.url,
+    });
     throw error;
   }
 );
@@ -297,7 +306,10 @@ export class SearchService {
               const result = JSON.parse(line.slice(6));
               onResult(result);
             } catch (e) {
-              console.warn('Failed to parse streaming result:', e);
+              searchApiLogger.warn('Failed to parse streaming result', {
+                error: e instanceof Error ? e : String(e),
+                lineLength: line.length,
+              });
             }
           }
         }
