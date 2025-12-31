@@ -171,4 +171,116 @@ router.get('/comments/:claimId',
   })
 );
 
+// POST /api/collaboration/comments - Add a comment (REST fallback)
+router.post('/comments',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { claimId, text, parentCommentId } = req.body;
+    const userId = req.user!._id.toString();
+
+    // Validate required fields
+    if (!claimId) {
+      throw createError('Claim ID is required', 400, 'CLAIM_ID_REQUIRED');
+    }
+
+    if (!text || text.trim().length < 1) {
+      throw createError('Comment text is required', 400, 'COMMENT_TEXT_REQUIRED');
+    }
+
+    if (text.length > 1000) {
+      throw createError('Comment text cannot exceed 1000 characters', 400, 'COMMENT_TEXT_TOO_LONG');
+    }
+
+    // Find claim and verify access
+    const claim = await Claim.findOne({ _id: claimId, isActive: true })
+      .populate('project', 'owner collaborators visibility settings');
+
+    if (!claim) {
+      throw createError('Claim not found', 404, 'CLAIM_NOT_FOUND');
+    }
+
+    // Check project access and comment permissions
+    const project = claim.project as any;
+    const hasAccess = project.owner.toString() === userId ||
+      project.collaborators.some((c: any) => c.user.toString() === userId) ||
+      project.visibility === 'public';
+
+    if (!hasAccess) {
+      throw createError('Access denied to claim', 403, 'CLAIM_ACCESS_DENIED');
+    }
+
+    // Check if comments are allowed on this project
+    if (!project.settings?.collaboration?.allowComments) {
+      throw createError('Comments are not allowed on this project', 403, 'COMMENTS_DISABLED');
+    }
+
+    // If parentCommentId is provided, add as a reply
+    if (parentCommentId) {
+      const parentComment = claim.comments.find(
+        (c: any) => c._id.toString() === parentCommentId
+      );
+
+      if (!parentComment) {
+        throw createError('Parent comment not found', 404, 'PARENT_COMMENT_NOT_FOUND');
+      }
+
+      // Add reply to parent comment
+      parentComment.replies.push({
+        user: req.user!._id,
+        text: text.trim(),
+        timestamp: new Date(),
+      });
+
+      await claim.save();
+      await claim.populate('comments.replies.user', 'firstName lastName email avatar');
+
+      const updatedParentComment = claim.comments.find(
+        (c: any) => c._id.toString() === parentCommentId
+      );
+      const newReply = updatedParentComment?.replies[updatedParentComment.replies.length - 1];
+
+      logger.info(`Reply added to comment on claim ${claimId} by ${req.user!.email}`);
+
+      res.status(201).json({
+        success: true,
+        message: 'Reply added successfully',
+        data: newReply,
+      });
+      return;
+    }
+
+    // Add new top-level comment
+    claim.comments.push({
+      user: req.user!._id,
+      text: text.trim(),
+      timestamp: new Date(),
+      resolved: false,
+      replies: [],
+    });
+
+    await claim.save();
+    await claim.populate('comments.user', 'firstName lastName email avatar');
+
+    const newComment = claim.comments[claim.comments.length - 1];
+
+    // Clear related caches
+    await redisManager.deletePattern(`collaboration:comments:${claimId}:*`);
+
+    // Track activity
+    await redisManager.trackUserActivity(userId, {
+      action: 'add_comment',
+      claimId,
+      details: { commentId: newComment._id?.toString() },
+    });
+
+    logger.info(`Comment added to claim ${claimId} by ${req.user!.email}`);
+
+    res.status(201).json({
+      success: true,
+      message: 'Comment added successfully',
+      data: newComment,
+    });
+  })
+);
+
 export default router;
