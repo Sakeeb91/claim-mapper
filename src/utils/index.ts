@@ -1,9 +1,13 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { logger as loggerInstance } from './logger';
 
 // Re-export logger utility
 export { logger, Logger, ChildLogger } from './logger';
 export type { LogLevel, LogContext } from './logger';
+
+// Internal logger reference for use in this file
+const logger = loggerInstance;
 
 // Utility for merging Tailwind classes
 export function cn(...inputs: ClassValue[]) {
