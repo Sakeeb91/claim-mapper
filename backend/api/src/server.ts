@@ -13,6 +13,7 @@ import redisManager from './config/redis';
 import { logger } from './utils/logger';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { sanitize } from './middleware/validation';
+import { verifyEmailConnection, getEmailQueueStats, isEmailEnabled, closeEmailQueue } from './services/email';
 
 // Routes
 import authRoutes from './routes/auth';
@@ -137,6 +138,7 @@ app.get('/health', async (req, res) => {
       database: 'unknown',
       redis: 'unknown',
       mlService: 'unknown',
+      email: 'unknown',
     },
     memory: process.memoryUsage(),
     cpu: process.cpuUsage(),
@@ -170,8 +172,20 @@ app.get('/health', async (req, res) => {
     healthCheck.services.mlService = 'unhealthy';
   }
 
-  const isHealthy = Object.values(healthCheck.services).every(status => 
-    status === 'healthy' || status === 'unknown'
+  try {
+    // Check email service
+    if (!isEmailEnabled()) {
+      healthCheck.services.email = 'disabled';
+    } else {
+      const isEmailHealthy = await verifyEmailConnection();
+      healthCheck.services.email = isEmailHealthy ? 'healthy' : 'unhealthy';
+    }
+  } catch (error) {
+    healthCheck.services.email = 'error';
+  }
+
+  const isHealthy = Object.values(healthCheck.services).every(status =>
+    status === 'healthy' || status === 'unknown' || status === 'disabled'
   );
 
   res.status(isHealthy ? 200 : 503).json(healthCheck);
@@ -252,7 +266,11 @@ async function gracefulShutdown(signal: string) {
       // Close Redis connection
       await redisManager.disconnect();
       logger.info('Redis connection closed');
-      
+
+      // Close email queue
+      await closeEmailQueue();
+      logger.info('Email queue closed');
+
       // Close WebSocket connections
       io.close(() => {
         logger.info('WebSocket server closed');
