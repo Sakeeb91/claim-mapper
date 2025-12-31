@@ -50,6 +50,7 @@ export interface IUser extends Document {
   resetPasswordToken?: string;
   resetPasswordExpires?: Date;
   verificationToken?: string;
+  unsubscribeToken?: string;
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
@@ -175,6 +176,11 @@ const userSchema = new Schema<IUser>({
   resetPasswordToken: String,
   resetPasswordExpires: Date,
   verificationToken: String,
+  unsubscribeToken: {
+    type: String,
+    sparse: true,
+    index: true,
+  },
 }, {
   timestamps: true,
   toJSON: { virtuals: true },
