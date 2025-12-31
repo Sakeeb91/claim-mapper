@@ -1,12 +1,15 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
-import { 
-  AppState, 
-  Claim, 
-  GraphData, 
-  GraphFilters, 
-  GraphLayout, 
+import {
+  AppState,
+  Claim,
+  GraphData,
+  GraphFilters,
+  GraphLayout,
   SearchFilters,
+  SearchResult,
+  SearchFacetsResult,
+  GraphMetrics,
   User,
   UserPresence,
   Comment,
@@ -16,6 +19,9 @@ import {
   Notification
 } from '@/types';
 import { io, Socket } from 'socket.io-client';
+import { GraphApiService } from '@/services/graphApi';
+import { ClaimsApiService } from '@/services/claimsApi';
+import { apiService } from '@/services/api';
 
 interface AppActions {
   // Claims
@@ -31,11 +37,18 @@ interface AppActions {
   // Search
   setSearchQuery: (query: string) => void;
   setFilters: (filters: SearchFilters) => void;
+  setSearchResults: (results: SearchResult[]) => void;
+  setSearchFacets: (facets: SearchFacetsResult | null) => void;
+  addToSearchHistory: (query: string) => void;
+  clearSearchHistory: () => void;
   
   // Graph
   setGraphData: (data: GraphData) => void;
   setGraphFilters: (filters: GraphFilters) => void;
   setGraphLayout: (layout: GraphLayout) => void;
+  setGraphMetrics: (metrics: GraphMetrics | null) => void;
+  setCurrentProjectId: (projectId: string | null) => void;
+  applyGraphFilters: (filters: GraphFilters) => void;
   
   // UI State
   setLoading: (loading: boolean) => void;
@@ -137,6 +150,13 @@ const initialState: AppState = {
   reconnecting: false,
   editingClaim: null,
   notifications: [],
+  // Search state
+  searchResults: [],
+  searchFacets: null,
+  searchHistory: [],
+  // Graph state
+  graphMetrics: null,
+  currentProjectId: null,
 };
 
 export const useAppStore = create<AppState & AppActions>()(
