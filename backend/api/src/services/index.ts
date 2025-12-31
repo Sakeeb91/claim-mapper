@@ -2,6 +2,7 @@
  * Services barrel export
  *
  * Centralized export for all backend services including:
+ * - Email service (Nodemailer + Bull queue)
  * - Embedding generation (OpenAI)
  * - Vector database operations (Pinecone)
  * - Document ingestion pipeline
@@ -92,3 +93,37 @@ export type {
   DeduplicationOptions,
   DeduplicationReport,
 } from './deduplication';
+
+// Email service
+export {
+  sendEmail,
+  sendEmailImmediate,
+  isEmailEnabled,
+  verifyEmailConnection,
+  getEmailQueueStats,
+  closeEmailQueue,
+  emailConfig,
+  getTransporter,
+  getEmailQueue,
+} from './email';
+
+export {
+  renderPasswordResetEmail,
+  renderInvitationEmail,
+  renderWelcomeEmail,
+  renderCollaborationEmail,
+  renderUnsubscribeEmail,
+} from './email';
+
+export type {
+  EmailConfig,
+  EmailJobData,
+  EmailResult,
+  EmailStatus,
+  EmailType,
+  EmailAttachment,
+  PasswordResetEmailData,
+  InvitationEmailData,
+  WelcomeEmailData,
+  CollaborationEmailData,
+} from './email';
