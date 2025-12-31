@@ -22,6 +22,11 @@ import { io, Socket } from 'socket.io-client';
 import { GraphApiService } from '@/services/graphApi';
 import { ClaimsApiService } from '@/services/claimsApi';
 import { apiService } from '@/services/api';
+import { logger } from '@/utils/logger';
+import { LOG_COMPONENTS, LOG_ACTIONS } from '@/constants/logging';
+
+// Create child logger for App Store
+const storeLogger = logger.child({ component: LOG_COMPONENTS.APP_STORE });
 
 interface AppActions {
   // Claims
@@ -481,12 +486,12 @@ export const useAppStore = create<AppState & AppActions>()(
         
         // Connection events
         newSocket.on('connect', () => {
-          console.log('WebSocket connected');
+          storeLogger.info('WebSocket connected', { action: LOG_ACTIONS.CONNECT });
           set({ isConnected: true, reconnecting: false });
         });
-        
+
         newSocket.on('disconnect', (reason) => {
-          console.log('WebSocket disconnected:', reason);
+          storeLogger.info('WebSocket disconnected', { action: LOG_ACTIONS.DISCONNECT, reason });
           set({ isConnected: false });
         });
         
