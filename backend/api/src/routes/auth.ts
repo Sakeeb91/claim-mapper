@@ -3,11 +3,13 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import User from '../models/User';
+import EmailLog from '../models/EmailLog';
 import { generateToken, generateRefreshToken, authenticate, refreshToken, logout } from '../middleware/auth';
 import { validate, validationSchemas, sanitize } from '../middleware/validation';
 import { asyncHandler, createError } from '../middleware/errorHandler';
 import redisManager from '../config/redis';
 import { logger } from '../utils/logger';
+import { sendEmail, isEmailEnabled, renderPasswordResetEmail } from '../services/email';
 
 const router = express.Router();
 
@@ -274,15 +276,152 @@ router.post('/forgot-password',
     // Store reset token in Redis for quick lookup
     await redisManager.set(`reset_token:${resetToken}`, user._id.toString(), 15 * 60); // 15 minutes
 
-    // TODO: Send email with reset link
-    // const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
-    // await sendResetEmail(user.email, resetUrl);
+    // Send password reset email
+    const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
+    const emailHtml = renderPasswordResetEmail({
+      userName: user.firstName,
+      resetUrl,
+      expiresIn: '15 minutes',
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent'),
+    });
 
-    logger.info(`Password reset requested for user: ${user.email}`);
+    const emailResult = await sendEmail(
+      user.email,
+      'Password Reset Request - Claim Mapper',
+      emailHtml,
+      {
+        metadata: {
+          userId: user._id.toString(),
+          type: 'password_reset',
+          priority: 'high',
+        },
+      }
+    );
+
+    // Log email for tracking
+    if (emailResult.queued) {
+      await EmailLog.create({
+        to: user.email,
+        from: process.env.FROM_EMAIL || 'noreply@claimmapper.com',
+        subject: 'Password Reset Request - Claim Mapper',
+        type: 'password_reset',
+        status: 'queued',
+        jobId: emailResult.jobId,
+        userId: user._id,
+        metadata: {
+          resetToken: resetToken.substring(0, 8) + '...', // Store partial for debugging
+          ipAddress: req.ip,
+        },
+      });
+    }
+
+    logger.info(`Password reset requested for user: ${user.email}`, {
+      emailQueued: emailResult.queued,
+    });
 
     res.json({
       success: true,
       message: 'If an account with that email exists, we have sent a password reset link.',
+    });
+  })
+);
+
+// POST /api/auth/reset-password - Reset password with token
+router.post('/reset-password',
+  sanitize,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { token, password } = req.body;
+
+    if (!token || !password) {
+      throw createError('Token and password are required', 400, 'MISSING_REQUIRED_FIELD');
+    }
+
+    if (password.length < 8) {
+      throw createError('Password must be at least 8 characters', 400, 'INVALID_INPUT');
+    }
+
+    // Check Redis for quick lookup
+    const userId = await redisManager.get<string>(`reset_token:${token}`);
+
+    if (!userId) {
+      throw createError('Invalid or expired reset token', 400, 'RESET_TOKEN_INVALID');
+    }
+
+    // Find user and verify token
+    const user = await User.findOne({
+      _id: userId,
+      resetPasswordToken: token,
+      resetPasswordExpires: { $gt: new Date() },
+      isActive: true,
+    }).select('+password');
+
+    if (!user) {
+      // Clean up Redis if user not found
+      await redisManager.del(`reset_token:${token}`);
+      throw createError('Invalid or expired reset token', 400, 'RESET_TOKEN_INVALID');
+    }
+
+    // Update password
+    user.password = password;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+    await user.save();
+
+    // Clean up Redis
+    await redisManager.del(`reset_token:${token}`);
+
+    // Invalidate all existing refresh tokens for security
+    await redisManager.deletePattern(`refresh_token:${user._id}*`);
+
+    // Track password reset
+    await redisManager.trackUserActivity(user._id.toString(), {
+      action: 'password_reset',
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+    });
+
+    logger.info(`Password reset completed for user: ${user.email}`);
+
+    res.json({
+      success: true,
+      message: 'Password reset successfully. Please log in with your new password.',
+    });
+  })
+);
+
+// POST /api/auth/verify-reset-token - Verify reset token is valid
+router.post('/verify-reset-token',
+  sanitize,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { token } = req.body;
+
+    if (!token) {
+      throw createError('Token is required', 400, 'MISSING_REQUIRED_FIELD');
+    }
+
+    // Check Redis for quick lookup
+    const userId = await redisManager.get<string>(`reset_token:${token}`);
+
+    if (!userId) {
+      res.json({
+        success: true,
+        data: { valid: false },
+      });
+      return;
+    }
+
+    // Verify user exists and token matches
+    const user = await User.findOne({
+      _id: userId,
+      resetPasswordToken: token,
+      resetPasswordExpires: { $gt: new Date() },
+      isActive: true,
+    });
+
+    res.json({
+      success: true,
+      data: { valid: !!user },
     });
   })
 );
