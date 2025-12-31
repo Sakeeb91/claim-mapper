@@ -1,11 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { 
-  AlertTriangle, 
-  X, 
-  Users, 
-  Merge, 
+import {
+  AlertTriangle,
+  X,
+  Users,
+  Merge,
   RotateCcw,
   CheckCircle,
   Clock,
@@ -14,6 +14,10 @@ import {
 import { ConflictResolution } from '@/types';
 import { useAppStore } from '@/store/useAppStore';
 import { Modal } from '@/components/ui/Modal';
+import { logger } from '@/utils/logger';
+import { LOG_COMPONENTS, LOG_ACTIONS } from '@/constants/logging';
+
+const conflictLogger = logger.child({ component: LOG_COMPONENTS.CONFLICT_RESOLVER });
 
 interface ConflictResolverProps {
   conflicts: ConflictResolution[];
@@ -40,7 +44,12 @@ export function ConflictResolver({ conflicts, claimId, onClose }: ConflictResolv
         resolvedBy: user?.id
       });
     } catch (error) {
-      console.error('Failed to resolve conflict:', error);
+      conflictLogger.error('Failed to resolve conflict', {
+        action: LOG_ACTIONS.RESOLVE,
+        error: error instanceof Error ? error : String(error),
+        conflictId: selectedConflict.id,
+        strategy: resolutionStrategy,
+      });
     } finally {
       setResolving(false);
     }
@@ -273,7 +282,7 @@ export function ConflictResolver({ conflicts, claimId, onClose }: ConflictResolv
                   <button
                     onClick={() => {
                       // Close conflict resolver
-                      console.log('Cancel resolution');
+                      conflictLogger.debug('Cancel resolution', { conflictId: selectedConflict?.id });
                     }}
                     className="rounded-lg border px-4 py-2 text-sm hover:bg-accent"
                   >

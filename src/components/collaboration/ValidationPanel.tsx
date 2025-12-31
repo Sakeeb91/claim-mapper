@@ -1,11 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { 
-  X, 
-  Star, 
-  TrendingUp, 
-  Users, 
+import {
+  X,
+  Star,
+  TrendingUp,
+  Users,
   Award,
   AlertTriangle,
   CheckCircle,
@@ -13,8 +13,13 @@ import {
   Send
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
+import { logger } from '@/utils/logger';
+import { LOG_COMPONENTS, LOG_ACTIONS } from '@/constants/logging';
+
 import { ValidationSubmission, ValidationResult } from '@/types';
 import { Modal } from '@/components/ui/Modal';
+
+const validationLogger = logger.child({ component: LOG_COMPONENTS.VALIDATION_PANEL });
 
 interface ValidationPanelProps {
   claimId: string;
@@ -78,9 +83,13 @@ export function ValidationPanel({ claimId, onClose }: ValidationPanelProps) {
       setConfidence(0.8);
       setFeedback('');
       setActiveTab('results');
-      
+
     } catch (error) {
-      console.error('Failed to submit validation:', error);
+      validationLogger.error('Failed to submit validation', {
+        action: LOG_ACTIONS.SUBMIT,
+        error: error instanceof Error ? error : String(error),
+        claimId,
+      });
     } finally {
       setSubmitting(false);
     }

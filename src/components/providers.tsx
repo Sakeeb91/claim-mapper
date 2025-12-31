@@ -4,6 +4,10 @@ import { QueryClient, QueryClientProvider } from 'react-query';
 import { useState, useEffect } from 'react';
 import { useSearchStore } from '@/store/searchStore';
 import { SearchService } from '@/services/searchApi';
+import { logger } from '@/utils/logger';
+import { LOG_COMPONENTS, LOG_ACTIONS } from '@/constants/logging';
+
+const providerLogger = logger.child({ component: LOG_COMPONENTS.APP_PROVIDERS });
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient({
@@ -29,7 +33,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
         useSearchStore.getState().updatePreferences(preferences);
       } catch (error) {
         // User not authenticated or preferences not found - use defaults
-        console.log('Using default search preferences');
+        providerLogger.debug('Using default search preferences', {
+          action: LOG_ACTIONS.INITIALIZE,
+        });
       }
     };
 

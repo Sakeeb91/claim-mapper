@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { 
-  Users, 
-  Plus, 
-  Search, 
+import {
+  Users,
+  Plus,
+  Search,
   Filter,
   Grid,
   List,
@@ -16,6 +16,10 @@ import { CollaborativeEditor } from '@/components/collaboration/CollaborativeEdi
 import { CollaborationSidebar } from '@/components/collaboration/CollaborationSidebar';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { logger } from '@/utils/logger';
+import { LOG_COMPONENTS, LOG_ACTIONS } from '@/constants/logging';
+
+const collaborateLogger = logger.child({ component: LOG_COMPONENTS.COLLABORATE_PAGE });
 
 interface CollaborationProject {
   id: string;
@@ -94,7 +98,7 @@ export default function CollaboratePage() {
 
   const handleCreateNewProject = () => {
     // TODO: Implement project creation
-    console.log('Create new project');
+    collaborateLogger.debug('Create new project', { action: LOG_ACTIONS.CREATE });
   };
 
   const getStatusColor = (status: CollaborationProject['status']) => {
@@ -136,7 +140,7 @@ export default function CollaboratePage() {
             claimId={selectedClaim}
             initialContent="This is a sample claim that can be collaboratively edited..."
             onSave={(content) => {
-              console.log('Saved content:', content);
+              collaborateLogger.debug('Saved content', { action: LOG_ACTIONS.SAVE, claimId: selectedClaim, contentLength: content.length });
             }}
           />
         </div>

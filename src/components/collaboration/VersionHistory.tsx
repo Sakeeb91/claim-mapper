@@ -6,6 +6,10 @@ import { useAppStore } from '@/store/useAppStore';
 import { ChangeEvent } from '@/types';
 import { Modal } from '@/components/ui/Modal';
 import { formatDistanceToNow } from 'date-fns';
+import { logger } from '@/utils/logger';
+import { LOG_COMPONENTS, LOG_ACTIONS } from '@/constants/logging';
+
+const versionLogger = logger.child({ component: LOG_COMPONENTS.VERSION_HISTORY });
 
 interface VersionHistoryProps {
   claimId: string;
@@ -35,7 +39,7 @@ export function VersionHistory({ claimId, onClose }: VersionHistoryProps) {
 
   const handleRevertToVersion = (change: ChangeEvent) => {
     // TODO: Implement version revert
-    console.log('Reverting to version:', change.id);
+    versionLogger.debug('Reverting to version', { action: LOG_ACTIONS.REVERT, versionId: change.id });
   };
 
   const getChangeIcon = (type: ChangeEvent['type']) => {

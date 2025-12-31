@@ -1,13 +1,13 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { 
-  Save, 
-  Users, 
-  MessageSquare, 
-  History, 
-  Share2, 
-  Settings, 
+import {
+  Save,
+  Users,
+  MessageSquare,
+  History,
+  Share2,
+  Settings,
   AlertTriangle,
   CheckCircle,
   Clock,
@@ -21,6 +21,10 @@ import { ValidationPanel } from './ValidationPanel';
 import { VersionHistory } from './VersionHistory';
 import { ConflictResolver } from './ConflictResolver';
 import { toast } from 'react-hot-toast';
+import { logger } from '@/utils/logger';
+import { LOG_COMPONENTS, LOG_ACTIONS } from '@/constants/logging';
+
+const editorLogger = logger.child({ component: LOG_COMPONENTS.COLLABORATIVE_EDITOR });
 
 interface CollaborativeEditorProps {
   claimId: string;
@@ -68,7 +72,11 @@ export function CollaborativeEditor({
       toast.success('Changes saved successfully');
     } catch (error) {
       toast.error('Failed to save changes');
-      console.error('Save error:', error);
+      editorLogger.error('Save error', {
+        action: LOG_ACTIONS.SAVE,
+        error: error instanceof Error ? error : String(error),
+        claimId,
+      });
     }
   }, [content, claimId, onSave, stopEditingClaim]);
   
@@ -365,11 +373,11 @@ export function CollaborativeEditor({
                 />
               ))}
 
-              <button 
+              <button
                 className="w-full rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground hover:bg-accent"
                 onClick={() => {
                   // TODO: Open comment creation dialog
-                  console.log('Add comment clicked');
+                  editorLogger.debug('Add comment clicked', { action: LOG_ACTIONS.COMMENT, claimId });
                 }}
               >
                 Add Comment

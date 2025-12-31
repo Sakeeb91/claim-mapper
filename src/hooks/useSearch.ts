@@ -15,6 +15,11 @@ import {
   SearchableContentType
 } from '@/types/search';
 import { useDebounce } from './useDebounce';
+import { logger } from '@/utils/logger';
+import { LOG_COMPONENTS, LOG_ACTIONS } from '@/constants/logging';
+
+// Create child logger for search hook
+const searchHookLogger = logger.child({ component: LOG_COMPONENTS.SEARCH_HOOK });
 
 // Main search hook
 export function useSearch(options: UseSearchOptions = {}): UseSearchReturn {
@@ -107,7 +112,11 @@ export function useSearch(options: UseSearchOptions = {}): UseSearchReturn {
         }
       },
       onError: (err) => {
-        console.error('Search error:', err);
+        searchHookLogger.error('Search error', {
+          action: LOG_ACTIONS.SEARCH,
+          error: err instanceof Error ? err : String(err),
+          query: debouncedQuery,
+        });
       },
     }
   );
@@ -262,7 +271,10 @@ export function useSemanticSearch(): UseSemanticSearchReturn {
         setSemanticLoading(false);
       },
       onError: (error) => {
-        console.error('Semantic search error:', error);
+        searchHookLogger.error('Semantic search error', {
+          action: LOG_ACTIONS.SEMANTIC_SEARCH,
+          error: error instanceof Error ? error : String(error),
+        });
         setSemanticLoading(false);
       },
     }

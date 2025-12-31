@@ -1,4 +1,9 @@
 import { useState, useEffect } from 'react';
+import { logger } from '@/utils/logger';
+import { LOG_COMPONENTS, LOG_ACTIONS } from '@/constants/logging';
+
+// Create child logger for localStorage hook
+const storageLogger = logger.child({ component: LOG_COMPONENTS.LOCAL_STORAGE_HOOK });
 
 export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T) => void] {
   // Get value from localStorage or return initialValue
@@ -11,7 +16,11 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T)
       const item = window.localStorage.getItem(key);
       return item ? JSON.parse(item) : initialValue;
     } catch (error) {
-      console.warn(`Error reading localStorage key "${key}":`, error);
+      storageLogger.warn('Error reading localStorage', {
+        action: LOG_ACTIONS.STORAGE_READ,
+        error: error instanceof Error ? error : String(error),
+        key,
+      });
       return initialValue;
     }
   });
@@ -24,7 +33,11 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T)
         window.localStorage.setItem(key, JSON.stringify(value));
       }
     } catch (error) {
-      console.warn(`Error setting localStorage key "${key}":`, error);
+      storageLogger.warn('Error setting localStorage', {
+        action: LOG_ACTIONS.STORAGE_WRITE,
+        error: error instanceof Error ? error : String(error),
+        key,
+      });
     }
   };
 
