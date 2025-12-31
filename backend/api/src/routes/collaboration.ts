@@ -451,4 +451,111 @@ router.post('/versions/:claimId/revert',
   })
 );
 
+// GET /api/collaboration/activity/:projectId - Get activity log for a project
+router.get('/activity/:projectId',
+  authenticate,
+  validate(validationSchemas.objectId, 'params'),
+  validatePagination,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { projectId } = req.params;
+    const { page = 1, limit = 50, action, userId: filterUserId } = req.query;
+    const currentUserId = req.user!._id.toString();
+
+    // Verify project exists and user has access
+    const project = await Project.findById(projectId);
+
+    if (!project || !project.isActive) {
+      throw createError('Project not found', 404, 'PROJECT_NOT_FOUND');
+    }
+
+    // Check project access
+    const hasAccess = project.owner.toString() === currentUserId ||
+      project.collaborators.some(c => c.user.toString() === currentUserId) ||
+      project.visibility === 'public';
+
+    if (!hasAccess) {
+      throw createError('Access denied to project', 403, 'PROJECT_ACCESS_DENIED');
+    }
+
+    // Build aggregation pipeline to get activities from all sessions in project
+    const matchStage: any = {
+      project: project._id,
+      isActive: true,
+    };
+
+    // Get all sessions for this project
+    const sessions = await Session.find(matchStage)
+      .populate('activities.user', 'firstName lastName email avatar')
+      .sort({ 'activities.timestamp': -1 });
+
+    // Flatten all activities from all sessions
+    let allActivities: any[] = [];
+
+    for (const session of sessions) {
+      const sessionActivities = (session.activities || []).map((activity: any) => ({
+        ...activity.toObject(),
+        sessionId: session._id,
+        sessionType: session.type,
+      }));
+      allActivities.push(...sessionActivities);
+    }
+
+    // Sort by timestamp (newest first)
+    allActivities.sort((a, b) =>
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+
+    // Apply filters
+    if (action) {
+      allActivities = allActivities.filter(a => a.action === action);
+    }
+
+    if (filterUserId) {
+      allActivities = allActivities.filter(a =>
+        a.user?._id?.toString() === filterUserId ||
+        a.user?.toString() === filterUserId
+      );
+    }
+
+    // Paginate
+    const total = allActivities.length;
+    const skip = (Number(page) - 1) * Number(limit);
+    const paginatedActivities = allActivities.slice(skip, skip + Number(limit));
+
+    const pagination = {
+      page: Number(page),
+      limit: Number(limit),
+      total,
+      totalPages: Math.ceil(total / Number(limit)),
+      hasNext: Number(page) < Math.ceil(total / Number(limit)),
+      hasPrev: Number(page) > 1,
+    };
+
+    // Get activity statistics
+    const activityStats = {
+      totalActivities: allActivities.length,
+      byAction: allActivities.reduce((acc: Record<string, number>, activity) => {
+        acc[activity.action] = (acc[activity.action] || 0) + 1;
+        return acc;
+      }, {}),
+      uniqueUsers: new Set(
+        allActivities
+          .map(a => a.user?._id?.toString() || a.user?.toString())
+          .filter(Boolean)
+      ).size,
+      lastActivity: allActivities[0]?.timestamp || null,
+    };
+
+    res.json({
+      success: true,
+      data: paginatedActivities,
+      pagination,
+      meta: {
+        projectId,
+        stats: activityStats,
+      },
+    });
+  })
+);
+
 export default router;
