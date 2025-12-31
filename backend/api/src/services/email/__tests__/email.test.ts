@@ -338,6 +338,7 @@ describe('Email Service Configuration', () => {
   it('should have correct default config values', () => {
     // Test via the EMAIL_CONFIG constant from types
     // The actual emailConfig in index.ts uses environment variables
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { EMAIL_CONFIG } = require('../types');
 
     expect(EMAIL_CONFIG.port).toBe(587);
