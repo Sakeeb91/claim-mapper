@@ -174,22 +174,10 @@ router.get('/comments/:claimId',
 // POST /api/collaboration/comments - Add a comment (REST fallback)
 router.post('/comments',
   authenticate,
+  validate(validationSchemas.addComment),
   asyncHandler(async (req: Request, res: Response) => {
     const { claimId, text, parentCommentId } = req.body;
     const userId = req.user!._id.toString();
-
-    // Validate required fields
-    if (!claimId) {
-      throw createError('Claim ID is required', 400, 'CLAIM_ID_REQUIRED');
-    }
-
-    if (!text || text.trim().length < 1) {
-      throw createError('Comment text is required', 400, 'COMMENT_TEXT_REQUIRED');
-    }
-
-    if (text.length > 1000) {
-      throw createError('Comment text cannot exceed 1000 characters', 400, 'COMMENT_TEXT_TOO_LONG');
-    }
 
     // Find claim and verify access
     const claim = await Claim.findOne({ _id: claimId, isActive: true })
@@ -352,15 +340,11 @@ router.get('/versions/:claimId',
 router.post('/versions/:claimId/revert',
   authenticate,
   validate(validationSchemas.objectId, 'params'),
+  validate(validationSchemas.revertVersion),
   asyncHandler(async (req: Request, res: Response) => {
     const { claimId } = req.params;
     const { versionNumber } = req.body;
     const userId = req.user!._id.toString();
-
-    // Validate version number
-    if (!versionNumber || typeof versionNumber !== 'number' || versionNumber < 1) {
-      throw createError('Valid version number is required', 400, 'VERSION_NUMBER_REQUIRED');
-    }
 
     // Find claim and verify access
     const claim = await Claim.findOne({ _id: claimId, isActive: true })

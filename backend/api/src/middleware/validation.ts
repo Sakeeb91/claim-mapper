@@ -399,6 +399,40 @@ export const validationSchemas = {
     }),
   }),
 
+  // Add comment validation
+  addComment: Joi.object({
+    claimId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).required().messages({
+      'string.pattern.base': 'Invalid claim ID format',
+      'string.empty': 'Claim ID is required',
+    }),
+    text: Joi.string().min(1).max(1000).required().messages({
+      'string.min': 'Comment text is required',
+      'string.max': 'Comment text cannot exceed 1000 characters',
+      'string.empty': 'Comment text is required',
+    }),
+    parentCommentId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).messages({
+      'string.pattern.base': 'Invalid parent comment ID format',
+    }),
+  }),
+
+  // Version revert validation
+  revertVersion: Joi.object({
+    versionNumber: Joi.number().integer().min(1).required().messages({
+      'number.base': 'Version number must be a valid number',
+      'number.min': 'Version number must be at least 1',
+      'any.required': 'Version number is required',
+    }),
+  }),
+
+  // Activity filter validation
+  activityFilter: Joi.object({
+    action: Joi.string().valid(
+      'join', 'leave', 'edit_claim', 'add_evidence',
+      'create_reasoning', 'comment', 'review', 'vote'
+    ),
+    userId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/),
+  }),
+
   // File upload validation
   fileUpload: Joi.object({
     filename: Joi.string().required(),
