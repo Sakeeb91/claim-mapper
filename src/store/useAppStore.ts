@@ -242,16 +242,74 @@ export const useAppStore = create<AppState & AppActions>()(
 
       // Actions
       searchClaims: async (query, filters) => {
-        set({ loading: true, error: null });
+        set({ loading: true, error: null, searchQuery: query });
+
         try {
-          // TODO: Implement API call
-          console.log('Searching claims:', query, filters);
-          // const results = await searchAPI(query, filters);
-          // set({ claims: results });
+          // Build query params for the search API
+          const params: Record<string, unknown> = {
+            q: query,
+            type: 'all',
+            page: 1,
+            limit: 20,
+            sort: 'relevance',
+          };
+
+          // Apply optional filters
+          if (filters?.type && filters.type.length > 0) {
+            params.type = filters.type.join(',');
+          }
+          if (filters?.tags && filters.tags.length > 0) {
+            params.tags = filters.tags;
+          }
+          if (filters?.confidence?.min !== undefined) {
+            params.minConfidence = filters.confidence.min;
+          }
+          if (filters?.dateRange?.start) {
+            params.dateFrom = filters.dateRange.start.toISOString();
+          }
+          if (filters?.dateRange?.end) {
+            params.dateTo = filters.dateRange.end.toISOString();
+          }
+          if (filters?.author && filters.author.length > 0) {
+            params.authors = filters.author;
+          }
+
+          // Call the search API
+          const response = await apiService.get<{
+            data: SearchResult[];
+            pagination: {
+              page: number;
+              limit: number;
+              total: number;
+              totalPages: number;
+            };
+            facets: {
+              types: Record<string, number>;
+              status: Record<string, number>;
+              tags: Array<{ name: string; count: number }>;
+            };
+          }>('/api/search', { params });
+
+          // Update store with search results
+          set({
+            searchResults: response.data.data || [],
+            searchFacets: response.data.facets || null,
+            loading: false,
+          });
+
+          // Add to search history
+          const { addToSearchHistory } = get();
+          addToSearchHistory(query);
+
         } catch (error) {
-          set({ error: error instanceof Error ? error.message : 'Search failed' });
-        } finally {
-          set({ loading: false });
+          const errorMessage = error instanceof Error
+            ? error.message
+            : (error as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Search failed';
+          set({
+            error: errorMessage,
+            loading: false,
+            searchResults: [],
+          });
         }
       },
 
