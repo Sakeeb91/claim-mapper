@@ -46,6 +46,29 @@ else
     echo "⚠️  .env.local already exists, skipping..."
 fi
 
+# Generate secure secrets for development
+echo "🔐 Generating secure development secrets..."
+if command -v openssl &> /dev/null; then
+    JWT_SECRET=$(openssl rand -base64 48)
+    SESSION_SECRET=$(openssl rand -base64 48)
+
+    # Update .env.local with generated secrets (if JWT_SECRET is still default)
+    if grep -q "your-super-secret" .env.local 2>/dev/null; then
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            sed -i '' "s/JWT_SECRET=.*/JWT_SECRET=$JWT_SECRET/" .env.local
+            sed -i '' "s/SESSION_SECRET=.*/SESSION_SECRET=$SESSION_SECRET/" .env.local
+        else
+            sed -i "s/JWT_SECRET=.*/JWT_SECRET=$JWT_SECRET/" .env.local
+            sed -i "s/SESSION_SECRET=.*/SESSION_SECRET=$SESSION_SECRET/" .env.local
+        fi
+        echo "✅ Generated secure JWT_SECRET and SESSION_SECRET"
+    else
+        echo "⚠️  Secrets already configured, skipping generation..."
+    fi
+else
+    echo "⚠️  openssl not found - please run ./scripts/generate-secrets.sh manually"
+fi
+
 # Create necessary directories
 echo "📁 Creating necessary directories..."
 mkdir -p logs
