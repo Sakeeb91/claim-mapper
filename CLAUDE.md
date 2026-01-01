@@ -170,7 +170,8 @@ backend/api/src/
 │   ├── database.ts  # MongoDB connection
 │   ├── redis.ts     # Redis connection manager
 │   └── vectordb.ts  # 🆕 Pinecone vector database config
-├── constants/       # Server constants
+├── constants/       # Server constants (security-validated at startup)
+│   ├── index.ts     # Security validation (JWT_SECRET), environment config
 │   ├── errors.ts    # Error messages and codes
 │   ├── status.ts    # HTTP and entity status codes
 │   └── validation.ts # Validation limits and patterns
@@ -257,8 +258,16 @@ gh run view <run-id> --log-failed    # View failure logs
 - **Development**: Configured in `docker-compose.dev.yml`
 - **Example file**: `.env.example` (copy to `.env.local` for local dev)
 - **API Keys**: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` for ML service LLM features
-- **Database**: `MONGODB_URI`, `REDIS_URL`, `JWT_SECRET`
+- **Database**: `MONGODB_URI`, `REDIS_URL`
 - **Vector DB** (optional): `PINECONE_API_KEY`, `PINECONE_INDEX_NAME`, `PINECONE_NAMESPACE`
+
+### Security Configuration
+- **JWT_SECRET**: **REQUIRED in production** (app fails to start without it)
+  - Minimum 32 characters, cryptographically random
+  - Generate with: `./scripts/generate-secrets.sh` or `openssl rand -base64 48`
+  - Development/test modes have automatic fallbacks
+- **Secret generation**: Run `./scripts/setup.sh` to auto-generate secrets
+- **Security validation**: Happens at server startup via `backend/api/src/constants/index.ts`
 
 ## Key Architecture Files
 
