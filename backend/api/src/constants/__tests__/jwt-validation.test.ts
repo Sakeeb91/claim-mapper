@@ -3,7 +3,13 @@
  *
  * Tests the security validation logic for JWT_SECRET environment variable.
  * These tests verify fail-fast behavior in production and proper fallbacks in development.
+ *
+ * Note: We use require() instead of import because jest.resetModules() only works
+ * with CommonJS require. ES modules are cached at parse time, before jest.resetModules()
+ * can clear the cache. This is the recommended pattern for testing module initialization.
  */
+
+/* eslint-disable @typescript-eslint/no-var-requires */
 
 describe('JWT Secret Validation', () => {
   const originalEnv = process.env;

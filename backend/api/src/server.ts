@@ -14,6 +14,7 @@ import { logger } from './utils/logger';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { sanitize } from './middleware/validation';
 import { verifyEmailConnection, getEmailQueueStats, isEmailEnabled, closeEmailQueue } from './services/email';
+import { SERVICE_CONFIG, IS_PRODUCTION, SECURITY_CONFIG } from './constants';
 
 // Routes
 import authRoutes from './routes/auth';
@@ -304,13 +305,9 @@ process.on('uncaughtException', (error) => {
 });
 
 // Validate security configuration at startup
+// Note: JWT validation happens during module initialization in constants/index.ts
+// This function logs the security status after validation completes
 function validateSecurityConfig(): void {
-  // Import SERVICE_CONFIG to trigger JWT validation (fail-fast)
-  // The validation happens during module initialization in constants/index.ts
-  // This import ensures validation runs before server starts
-  const { SERVICE_CONFIG, IS_PRODUCTION, SECURITY_CONFIG } = require('./constants');
-
-  // Log security status
   const jwtSecretLength = SERVICE_CONFIG.JWT_SECRET?.length || 0;
   const isSecretSecure = jwtSecretLength >= SECURITY_CONFIG.JWT_MIN_SECRET_LENGTH;
 
