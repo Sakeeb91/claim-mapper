@@ -100,6 +100,46 @@ docker run -d -p 27017:27017 --name mongo mongo:7.0
 docker run -d -p 6379:6379 --name redis redis:7.2-alpine
 ```
 
+## 🔒 Security Setup
+
+### JWT Secret Configuration
+
+The application requires a secure JWT secret for authentication. **This is mandatory for production deployments.**
+
+#### Generate a Secure Secret
+
+Using the provided script:
+```bash
+./scripts/generate-secrets.sh
+```
+
+Or manually with OpenSSL:
+```bash
+openssl rand -base64 48
+```
+
+#### Configure the Secret
+
+Add to your `.env` or `.env.local` file:
+```bash
+JWT_SECRET=<your-generated-secret>
+```
+
+#### Requirements
+
+| Environment | JWT_SECRET Required | Minimum Length |
+|-------------|---------------------|----------------|
+| Production  | **Yes** (app fails to start without it) | 32 characters |
+| Development | No (fallback generated) | 32 characters (recommended) |
+| Test        | No (test secret used) | N/A |
+
+#### Security Best Practices
+
+1. **Never commit secrets** - Add `.env` and `.env.local` to `.gitignore`
+2. **Use different secrets** per environment (dev, staging, production)
+3. **Rotate secrets periodically** - Recommended every 90 days
+4. **Use a secrets manager** in production (AWS Secrets Manager, HashiCorp Vault, etc.)
+
 ## 📁 Project Structure
 
 ```
