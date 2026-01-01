@@ -303,13 +303,36 @@ process.on('uncaughtException', (error) => {
   gracefulShutdown('UNCAUGHT_EXCEPTION');
 });
 
+// Validate security configuration at startup
+function validateSecurityConfig(): void {
+  // Import SERVICE_CONFIG to trigger JWT validation (fail-fast)
+  // The validation happens during module initialization in constants/index.ts
+  // This import ensures validation runs before server starts
+  const { SERVICE_CONFIG, IS_PRODUCTION, SECURITY_CONFIG } = require('./constants');
+
+  // Log security status
+  const jwtSecretLength = SERVICE_CONFIG.JWT_SECRET?.length || 0;
+  const isSecretSecure = jwtSecretLength >= SECURITY_CONFIG.JWT_MIN_SECRET_LENGTH;
+
+  if (IS_PRODUCTION) {
+    logger.info(`🔐 Production mode: JWT secret validated (${jwtSecretLength} chars)`);
+  } else if (isSecretSecure) {
+    logger.info(`🔐 JWT secret configured (${jwtSecretLength} chars)`);
+  } else {
+    logger.warn(`⚠️  Using development JWT secret - NOT for production use`);
+  }
+}
+
 // Start server
 async function startServer() {
   try {
+    // Validate security configuration first (fail-fast)
+    validateSecurityConfig();
+
     // Connect to databases
     await connectDatabase();
     await redisManager.connect();
-    
+
     // Start HTTP server
     server.listen(PORT, () => {
       logger.info(`🚀 Server running on port ${PORT}`);
@@ -317,7 +340,7 @@ async function startServer() {
       logger.info(`🔗 WebSocket server enabled`);
       logger.info(`🛡️  Security middleware enabled`);
       logger.info(`📊 Rate limiting active`);
-      
+
       if (isDevelopment) {
         logger.info(`📚 API Documentation: http://localhost:${PORT}/api`);
         logger.info(`🏥 Health Check: http://localhost:${PORT}/health`);
