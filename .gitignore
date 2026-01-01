@@ -16,6 +16,15 @@ build/
 .env.test.local
 .env.production.local
 
+# Security - sensitive files
+*.pem
+*.key
+*.crt
+secrets.json
+secrets.yaml
+secrets.yml
+.secrets/
+
 # IDE files
 .vscode/
 .idea/
