@@ -138,6 +138,8 @@ describe('JWT Secret Validation', () => {
 
   describe('SECURITY_CONFIG', () => {
     it('should export JWT_MIN_SECRET_LENGTH constant', () => {
+      // Clear JWT_SECRET to use test fallback (avoids short secret from CI env)
+      delete process.env.JWT_SECRET;
       process.env.NODE_ENV = 'test';
 
       const { SECURITY_CONFIG } = require('../index');
@@ -146,6 +148,8 @@ describe('JWT Secret Validation', () => {
     });
 
     it('should export BCRYPT_ROUNDS constant', () => {
+      // Clear JWT_SECRET to use test fallback (avoids short secret from CI env)
+      delete process.env.JWT_SECRET;
       process.env.NODE_ENV = 'test';
 
       const { SECURITY_CONFIG } = require('../index');
