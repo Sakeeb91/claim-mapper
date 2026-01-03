@@ -112,7 +112,7 @@ export function renderReasoningNodes(
   nodeSize: number = 15
 ): void {
   // Filter to only reasoning nodes
-  const reasoningNodes = nodeGroup.filter((d) => d.type === 'reasoning' && d.subtype);
+  const reasoningNodes = nodeGroup.filter((d) => d.type === 'reasoning' && !!d.subtype);
 
   // Remove any existing shapes (to re-render)
   reasoningNodes.selectAll('.reasoning-shape').remove();

@@ -39,6 +39,13 @@ export interface ReasoningStep {
   order: number;
   type: 'premise' | 'inference' | 'conclusion';
   confidence: number;
+  metadata?: {
+    linkedEvidence?: Array<{
+      evidenceId: string;
+      relationship: string;
+      confidence?: number;
+    }>;
+  };
 }
 
 // Graph visualization types

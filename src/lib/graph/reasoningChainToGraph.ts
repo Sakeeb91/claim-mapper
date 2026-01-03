@@ -240,22 +240,9 @@ function createEvidenceToPremiseLinks(
   links: GraphLink[],
   evidenceMap?: Map<string, EvidenceInfo>
 ): void {
-  // Access extended step data that may include linkedEvidence
-  const chainData = chain as ReasoningChain & {
-    steps: Array<ReasoningStep & {
-      metadata?: {
-        linkedEvidence?: Array<{
-          evidenceId: string;
-          relationship: string;
-          confidence?: number;
-        }>;
-      };
-    }>;
-  };
-
-  chainData.steps.forEach((step) => {
-    // Only link evidence to premises (and assumptions/observations)
-    if (step.type !== 'premise' && step.type !== 'assumption' && step.type !== 'observation') {
+  chain.steps.forEach((step) => {
+    // Only link evidence to premises
+    if (step.type !== 'premise') {
       return;
     }
 
