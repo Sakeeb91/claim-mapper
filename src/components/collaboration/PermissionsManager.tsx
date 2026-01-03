@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-import { Shield, Users } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { Shield, Users, ChevronDown } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 import { cn } from '@/utils';
 
 export type Permission = 'viewer' | 'editor' | 'admin';
@@ -49,6 +50,23 @@ export function PermissionsManager({
   const [loadingId, setLoadingId] = useState<string | null>(null);
 
   const canManageUsers = currentUserRole === 'admin';
+
+  const handleRoleChange = useCallback(
+    async (collaboratorId: string, newRole: Permission) => {
+      if (!onUpdateRole) return;
+
+      setLoadingId(collaboratorId);
+      try {
+        await onUpdateRole(collaboratorId, newRole);
+        toast.success('Role updated successfully');
+      } catch (error) {
+        toast.error('Failed to update role');
+      } finally {
+        setLoadingId(null);
+      }
+    },
+    [onUpdateRole]
+  );
 
   return (
     <div className={cn('space-y-4', className)}>
@@ -104,18 +122,40 @@ export function PermissionsManager({
                 </div>
               </div>
 
-              {/* Role Badge */}
+              {/* Role Selector or Badge */}
               <div className="flex items-center">
-                <span
-                  className={cn(
-                    'px-2 py-1 text-xs font-medium rounded-full',
-                    collaborator.role === 'admin' && 'bg-purple-100 text-purple-700',
-                    collaborator.role === 'editor' && 'bg-blue-100 text-blue-700',
-                    collaborator.role === 'viewer' && 'bg-gray-100 text-gray-700'
-                  )}
-                >
-                  {roleLabels[collaborator.role]}
-                </span>
+                {canManageUsers && collaborator.id !== currentUserId ? (
+                  <div className="relative">
+                    <select
+                      value={collaborator.role}
+                      onChange={(e) => handleRoleChange(collaborator.id, e.target.value as Permission)}
+                      disabled={loadingId === collaborator.id}
+                      aria-label={`Change role for ${collaborator.name}`}
+                      className={cn(
+                        'appearance-none rounded-md border border-input bg-background px-3 py-1 pr-8 text-xs font-medium',
+                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                        'disabled:opacity-50 disabled:cursor-not-allowed',
+                        loadingId === collaborator.id && 'animate-pulse'
+                      )}
+                    >
+                      <option value="viewer">{roleLabels.viewer}</option>
+                      <option value="editor">{roleLabels.editor}</option>
+                      <option value="admin">{roleLabels.admin}</option>
+                    </select>
+                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 pointer-events-none text-muted-foreground" />
+                  </div>
+                ) : (
+                  <span
+                    className={cn(
+                      'px-2 py-1 text-xs font-medium rounded-full',
+                      collaborator.role === 'admin' && 'bg-purple-100 text-purple-700',
+                      collaborator.role === 'editor' && 'bg-blue-100 text-blue-700',
+                      collaborator.role === 'viewer' && 'bg-gray-100 text-gray-700'
+                    )}
+                  >
+                    {roleLabels[collaborator.role]}
+                  </span>
+                )}
               </div>
             </div>
           ))
