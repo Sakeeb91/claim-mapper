@@ -119,7 +119,7 @@ export default function ExplorePage() {
   };
 
   // Handle node editing
-  const handleEdit = (nodeId: string) => {
+  const handleEdit = (_nodeId: string) => {
     toast.success('Edit functionality coming soon!');
     // Could open edit modal or navigate to edit page
   };
