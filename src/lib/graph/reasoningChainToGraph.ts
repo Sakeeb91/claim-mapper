@@ -103,6 +103,10 @@ export function reasoningChainToGraph(
     });
   });
 
+  // Create dependency links from structure.dependencies (if available)
+  // The backend model has: { from: number, to: number, relationship: string }
+  createDependencyLinks(chain, links);
+
   return {
     nodes,
     links,
@@ -111,4 +115,90 @@ export function reasoningChainToGraph(
     layout: opts.layout,
     stepCount: chain.steps.length,
   };
+}
+
+/**
+ * Creates links between reasoning steps based on the dependency structure.
+ * Dependencies define the logical flow: which steps lead to which other steps.
+ *
+ * @param chain - The reasoning chain with dependency data
+ * @param links - Array to add links to (mutated)
+ */
+function createDependencyLinks(chain: ReasoningChain, links: GraphLink[]): void {
+  // Access extended chain data that may include structure.dependencies
+  const chainData = chain as ReasoningChain & {
+    structure?: {
+      dependencies?: Array<{
+        from: number;
+        to: number;
+        relationship: 'supports' | 'requires' | 'contradicts';
+      }>;
+    };
+  };
+
+  const dependencies = chainData.structure?.dependencies;
+  if (!dependencies || dependencies.length === 0) {
+    // If no explicit dependencies, create sequential links based on step order
+    createSequentialLinks(chain, links);
+    return;
+  }
+
+  // Create links from explicit dependencies
+  dependencies.forEach((dep) => {
+    const sourceId = `step-${chain.id}-${dep.from}`;
+    const targetId = `step-${chain.id}-${dep.to}`;
+    const linkId = `dep-${chain.id}-${dep.from}-${dep.to}`;
+
+    const linkType = dep.relationship === 'contradicts' ? 'contradicts' : 'reasoning';
+
+    links.push({
+      id: linkId,
+      source: sourceId,
+      target: targetId,
+      type: linkType,
+      strength: 1,
+      label: dep.relationship,
+      curved: false,
+      data: {
+        relationship: dep.relationship,
+        isLogicalFlow: true,
+        chainId: chain.id,
+      },
+    });
+  });
+}
+
+/**
+ * Creates sequential links between steps when no explicit dependencies exist.
+ * Links are created based on step order: step 1 → step 2 → step 3, etc.
+ *
+ * @param chain - The reasoning chain
+ * @param links - Array to add links to (mutated)
+ */
+function createSequentialLinks(chain: ReasoningChain, links: GraphLink[]): void {
+  const sortedSteps = [...chain.steps].sort((a, b) => a.order - b.order);
+
+  for (let i = 0; i < sortedSteps.length - 1; i++) {
+    const currentStep = sortedSteps[i];
+    const nextStep = sortedSteps[i + 1];
+
+    const sourceId = `step-${chain.id}-${currentStep.order}`;
+    const targetId = `step-${chain.id}-${nextStep.order}`;
+    const linkId = `seq-${chain.id}-${currentStep.order}-${nextStep.order}`;
+
+    links.push({
+      id: linkId,
+      source: sourceId,
+      target: targetId,
+      type: 'reasoning',
+      strength: 1,
+      label: 'leads to',
+      curved: false,
+      data: {
+        relationship: 'requires',
+        isLogicalFlow: true,
+        chainId: chain.id,
+      },
+    });
+  }
 }
