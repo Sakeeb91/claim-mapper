@@ -2,6 +2,18 @@ import { DEFAULT_EXPORT_OPTIONS, EXPORT_FORMATS } from '@/constants';
 import type { ExportOptions, ExportResult } from '@/types';
 import { generateTimestampedFilename, downloadBlob } from './helpers';
 
+/**
+ * Exports an SVG graph visualization as a scalable vector graphics file.
+ * Uses native XMLSerializer for lossless export that preserves all styling.
+ *
+ * @param svgElement - The SVG element to export
+ * @param options - Export configuration options
+ * @returns ExportResult with success status and filename
+ *
+ * @example
+ * const result = exportAsSVG(svgElement);
+ * // Downloads: claim-mapper-graph-2024-01-15.svg
+ */
 export function exportAsSVG(
   svgElement: SVGSVGElement,
   options: ExportOptions = {}

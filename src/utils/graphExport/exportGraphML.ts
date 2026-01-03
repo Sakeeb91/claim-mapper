@@ -2,10 +2,18 @@ import { DEFAULT_EXPORT_OPTIONS, EXPORT_FORMATS, GRAPHML_NAMESPACE, GRAPHML_KEYS
 import type { ExportOptions, ExportResult, GraphData, GraphNode, GraphLink } from '@/types';
 import { generateTimestampedFilename, downloadBlob, escapeXml } from './helpers';
 
+/**
+ * Extracts the node ID from either a string ID or GraphNode object.
+ * D3.js force simulation may replace string IDs with object references.
+ */
 function getNodeId(node: string | GraphNode): string {
   return typeof node === 'string' ? node : node.id;
 }
 
+/**
+ * Builds a complete GraphML XML document from graph data.
+ * Includes key definitions for node and edge attributes.
+ */
 function buildGraphMLDocument(graphData: GraphData): string {
   const keyDefinitions = `
     <key id="${GRAPHML_KEYS.NODE_LABEL}" for="node" attr.name="label" attr.type="string"/>
@@ -45,6 +53,22 @@ function buildGraphMLDocument(graphData: GraphData): string {
 </graphml>`;
 }
 
+/**
+ * Exports graph data as GraphML format for network analysis tools.
+ * GraphML is compatible with Gephi, Cytoscape, and other graph analysis software.
+ *
+ * Exported attributes:
+ * - Nodes: id, label, type, confidence (if available)
+ * - Edges: source, target, type, weight (strength)
+ *
+ * @param graphData - The graph data containing nodes and links
+ * @param options - Export configuration options
+ * @returns ExportResult with success status and filename
+ *
+ * @example
+ * const result = exportAsGraphML(graphData);
+ * // Opens in Gephi for advanced network analysis
+ */
 export function exportAsGraphML(
   graphData: GraphData,
   options: ExportOptions = {}

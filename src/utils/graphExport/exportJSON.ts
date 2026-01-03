@@ -2,12 +2,30 @@ import { DEFAULT_EXPORT_OPTIONS, EXPORT_FORMATS, APP_VERSION } from '@/constants
 import type { ExportOptions, ExportResult, GraphData, ExportMetadata, GraphExportData } from '@/types';
 import { generateTimestampedFilename, downloadBlob } from './helpers';
 
+/**
+ * Extended options for JSON export including metadata fields.
+ */
 export interface JSONExportOptions extends ExportOptions {
   projectId?: string;
   projectName?: string;
   exportedBy?: string;
 }
 
+/**
+ * Exports graph data as a structured JSON file with optional metadata.
+ * The exported format can be re-imported to restore graph state.
+ *
+ * @param graphData - The graph data containing nodes and links
+ * @param options - Export configuration including optional metadata fields
+ * @returns ExportResult with success status and filename
+ *
+ * @example
+ * const result = exportAsJSON(graphData, {
+ *   includeMetadata: true,
+ *   projectName: 'My Analysis',
+ *   exportedBy: 'user@example.com'
+ * });
+ */
 export function exportAsJSON(
   graphData: GraphData,
   options: JSONExportOptions = {}

@@ -3,6 +3,20 @@ import { DEFAULT_EXPORT_OPTIONS } from '@/constants';
 import type { ExportOptions, ExportResult } from '@/types';
 import { generateTimestampedFilename, triggerDownload } from './helpers';
 
+/**
+ * Exports an SVG graph visualization as a high-quality PNG image.
+ * Uses html2canvas to rasterize the SVG and its parent container.
+ *
+ * @param svgElement - The SVG element to export (must have a parent element)
+ * @param options - Export configuration options
+ * @returns Promise resolving to an ExportResult with success status and filename
+ *
+ * @example
+ * const result = await exportAsPNG(svgElement, { filename: 'my-graph' });
+ * if (result.success) {
+ *   console.log(`Exported as ${result.filename}`);
+ * }
+ */
 export async function exportAsPNG(
   svgElement: SVGSVGElement,
   options: ExportOptions = {}
