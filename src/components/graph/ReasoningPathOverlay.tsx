@@ -16,6 +16,7 @@ import {
   REASONING_FLOW_GRADIENT,
   REASONING_LINK_COLORS,
 } from '@/constants/graph';
+import styles from './ReasoningPathOverlay.module.css';
 
 export interface ReasoningPathOverlayProps {
   /** Reference to the parent SVG element */
@@ -125,6 +126,50 @@ function createGradientDefs(
   highlightGradient.append('stop')
     .attr('offset', '100%')
     .attr('stop-color', REASONING_STEP_COLORS.conclusion);
+}
+
+/**
+ * Gets the appropriate CSS class for a reasoning path based on its state.
+ */
+function getPathClass(
+  link: GraphLink,
+  highlightedChainId: string | null,
+  animate: boolean
+): string {
+  const classes: string[] = [];
+
+  // Base path class based on animation setting
+  if (!animate) {
+    classes.push(styles.reasoningPathStatic);
+  }
+
+  // Check if this link is in the highlighted chain
+  const isHighlighted = highlightedChainId && link.data?.chainId === highlightedChainId;
+  const isDimmed = highlightedChainId && link.data?.chainId !== highlightedChainId;
+
+  if (isHighlighted) {
+    classes.push(styles.reasoningPathHighlighted);
+  } else if (isDimmed) {
+    classes.push(styles.reasoningPathDimmed);
+  } else if (animate) {
+    classes.push(styles.reasoningPath);
+  }
+
+  // Special handling for contradicting relationships
+  if (link.type === 'contradicts') {
+    classes.push(styles.reasoningPathContradicts);
+  }
+
+  // Evidence-to-premise paths get their own style
+  if (link.data?.relationship === 'evidence-to-premise') {
+    if (isHighlighted) {
+      classes.push(styles.evidencePathHighlighted);
+    } else {
+      classes.push(styles.evidencePath);
+    }
+  }
+
+  return classes.join(' ');
 }
 
 /**
@@ -244,7 +289,7 @@ export function ReasoningPathOverlay({
     // Add new paths
     const pathsEnter = paths.enter()
       .append('path')
-      .attr('class', 'reasoning-path')
+      .attr('class', (d) => `reasoning-path ${styles.pathEnter} ${getPathClass(d, highlightedChainId, animate)}`)
       .attr('fill', 'none')
       .attr('opacity', 0);
 
@@ -252,6 +297,8 @@ export function ReasoningPathOverlay({
     const pathsMerge = pathsEnter.merge(paths);
 
     pathsMerge
+      // Update CSS classes for animation state
+      .attr('class', (d) => `reasoning-path ${getPathClass(d, highlightedChainId, animate)}`)
       .transition()
       .duration(animate ? animationDuration : 0)
       .attr('stroke', (d) => {
@@ -280,6 +327,8 @@ export function ReasoningPathOverlay({
         }
         return 'url(#reasoning-arrow)';
       })
+      .attr('stroke-linecap', 'round')
+      .attr('stroke-linejoin', 'round')
       .on('end', () => {
         // Initial path position update
         if (pathGroupRef.current) {

@@ -1,0 +1,122 @@
+/**
+ * Reasoning Path Overlay Animations
+ *
+ * CSS animations for the "marching ants" flow effect
+ * on reasoning chain paths.
+ */
+
+/* Base flow animation */
+@keyframes flow {
+  0% {
+    stroke-dashoffset: 20;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Reverse flow for contradicting relationships */
+@keyframes flowReverse {
+  0% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: 20;
+  }
+}
+
+/* Pulse animation for highlighted paths */
+@keyframes pulse {
+  0%, 100% {
+    stroke-width: 3;
+    opacity: 1;
+  }
+  50% {
+    stroke-width: 4;
+    opacity: 0.9;
+  }
+}
+
+/* Glow effect for highlighted chains */
+@keyframes glow {
+  0%, 100% {
+    filter: drop-shadow(0 0 2px rgba(59, 130, 246, 0.3));
+  }
+  50% {
+    filter: drop-shadow(0 0 6px rgba(59, 130, 246, 0.6));
+  }
+}
+
+/* Animated reasoning path */
+.reasoningPath {
+  stroke-dasharray: 5, 5;
+  animation: flow 0.5s linear infinite;
+}
+
+/* Non-animated state */
+.reasoningPathStatic {
+  stroke-dasharray: none;
+}
+
+/* Highlighted path with pulse */
+.reasoningPathHighlighted {
+  stroke-dasharray: 8, 4;
+  animation:
+    flow 0.4s linear infinite,
+    pulse 2s ease-in-out infinite;
+}
+
+/* Dimmed path when another chain is highlighted */
+.reasoningPathDimmed {
+  opacity: 0.2;
+  stroke-dasharray: 3, 3;
+  animation: flow 1s linear infinite;
+}
+
+/* Contradicting relationship (red, reverse flow) */
+.reasoningPathContradicts {
+  animation: flowReverse 0.5s linear infinite;
+}
+
+/* Evidence-to-premise path (dashed with glow on highlight) */
+.evidencePath {
+  stroke-dasharray: 4, 4;
+  animation: flow 0.8s linear infinite;
+}
+
+.evidencePathHighlighted {
+  stroke-dasharray: 6, 3;
+  animation:
+    flow 0.6s linear infinite,
+    glow 2s ease-in-out infinite;
+}
+
+/* Fade in animation for new paths */
+.pathEnter {
+  animation: pathFadeIn 0.3s ease-out forwards;
+}
+
+@keyframes pathFadeIn {
+  from {
+    opacity: 0;
+    stroke-width: 0;
+  }
+  to {
+    opacity: 0.7;
+    stroke-width: 2;
+  }
+}
+
+/* Fade out animation for removed paths */
+.pathExit {
+  animation: pathFadeOut 0.2s ease-in forwards;
+}
+
+@keyframes pathFadeOut {
+  from {
+    opacity: 0.7;
+  }
+  to {
+    opacity: 0;
+  }
+}
