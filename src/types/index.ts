@@ -492,3 +492,6 @@ export interface ExportResult {
   format: ExportFormat;
   error?: string;
 }
+
+// Re-export reasoning types
+export * from './reasoning';
