@@ -1,6 +1,6 @@
 'use client';
 
-import { HTMLAttributes, forwardRef } from 'react';
+import { HTMLAttributes, forwardRef, KeyboardEvent } from 'react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/utils';
 
@@ -13,6 +13,7 @@ const cardVariants = cva(
         elevated: 'border-transparent shadow-md hover:shadow-lg transition-shadow',
         outlined: 'border-border shadow-none',
         ghost: 'border-transparent bg-transparent shadow-none',
+        interactive: 'border-border shadow-sm cursor-pointer hover:shadow-md hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 transition-all',
       },
       padding: {
         none: '',
@@ -35,11 +36,25 @@ export interface CardProps
 }
 
 const Card = forwardRef<HTMLDivElement, CardProps>(
-  ({ className, variant, padding, children, ...props }, ref) => {
+  ({ className, variant, padding, children, onClick, onKeyDown, ...props }, ref) => {
+    const isInteractive = variant === 'interactive' || onClick !== undefined;
+
+    const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+      if (isInteractive && (e.key === 'Enter' || e.key === ' ')) {
+        e.preventDefault();
+        onClick?.(e as unknown as React.MouseEvent<HTMLDivElement>);
+      }
+      onKeyDown?.(e);
+    };
+
     return (
       <div
         ref={ref}
         className={cn(cardVariants({ variant, padding, className }))}
+        onClick={onClick}
+        onKeyDown={handleKeyDown}
+        tabIndex={isInteractive ? 0 : undefined}
+        role={isInteractive ? 'button' : undefined}
         {...props}
       >
         {children}
