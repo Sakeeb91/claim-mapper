@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Shield, Users, ChevronDown } from 'lucide-react';
+import { Shield, Users, ChevronDown, Trash2, AlertCircle } from 'lucide-react';
+import { Button } from '@/components/ui';
 import { toast } from 'react-hot-toast';
 import { cn } from '@/utils';
 
@@ -48,6 +49,7 @@ export function PermissionsManager({
   className,
 }: PermissionsManagerProps) {
   const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
 
   const canManageUsers = currentUserRole === 'admin';
 
@@ -67,6 +69,32 @@ export function PermissionsManager({
     },
     [onUpdateRole]
   );
+
+  const handleRemoveClick = useCallback((collaboratorId: string) => {
+    setConfirmRemoveId(collaboratorId);
+  }, []);
+
+  const handleConfirmRemove = useCallback(
+    async (collaboratorId: string) => {
+      if (!onRemoveCollaborator) return;
+
+      setLoadingId(collaboratorId);
+      try {
+        await onRemoveCollaborator(collaboratorId);
+        toast.success('Collaborator removed');
+        setConfirmRemoveId(null);
+      } catch (error) {
+        toast.error('Failed to remove collaborator');
+      } finally {
+        setLoadingId(null);
+      }
+    },
+    [onRemoveCollaborator]
+  );
+
+  const handleCancelRemove = useCallback(() => {
+    setConfirmRemoveId(null);
+  }, []);
 
   return (
     <div className={cn('space-y-4', className)}>
@@ -122,28 +150,69 @@ export function PermissionsManager({
                 </div>
               </div>
 
-              {/* Role Selector or Badge */}
-              <div className="flex items-center">
+              {/* Role Selector or Badge + Remove */}
+              <div className="flex items-center space-x-2">
                 {canManageUsers && collaborator.id !== currentUserId ? (
-                  <div className="relative">
-                    <select
-                      value={collaborator.role}
-                      onChange={(e) => handleRoleChange(collaborator.id, e.target.value as Permission)}
-                      disabled={loadingId === collaborator.id}
-                      aria-label={`Change role for ${collaborator.name}`}
-                      className={cn(
-                        'appearance-none rounded-md border border-input bg-background px-3 py-1 pr-8 text-xs font-medium',
-                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                        'disabled:opacity-50 disabled:cursor-not-allowed',
-                        loadingId === collaborator.id && 'animate-pulse'
-                      )}
-                    >
-                      <option value="viewer">{roleLabels.viewer}</option>
-                      <option value="editor">{roleLabels.editor}</option>
-                      <option value="admin">{roleLabels.admin}</option>
-                    </select>
-                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 pointer-events-none text-muted-foreground" />
-                  </div>
+                  <>
+                    {/* Role Dropdown */}
+                    <div className="relative">
+                      <select
+                        value={collaborator.role}
+                        onChange={(e) => handleRoleChange(collaborator.id, e.target.value as Permission)}
+                        disabled={loadingId === collaborator.id || confirmRemoveId === collaborator.id}
+                        aria-label={`Change role for ${collaborator.name}`}
+                        className={cn(
+                          'appearance-none rounded-md border border-input bg-background px-3 py-1 pr-8 text-xs font-medium',
+                          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                          'disabled:opacity-50 disabled:cursor-not-allowed',
+                          loadingId === collaborator.id && 'animate-pulse'
+                        )}
+                      >
+                        <option value="viewer">{roleLabels.viewer}</option>
+                        <option value="editor">{roleLabels.editor}</option>
+                        <option value="admin">{roleLabels.admin}</option>
+                      </select>
+                      <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 pointer-events-none text-muted-foreground" />
+                    </div>
+
+                    {/* Remove Button / Confirmation */}
+                    {confirmRemoveId === collaborator.id ? (
+                      <div className="flex items-center space-x-1">
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => handleConfirmRemove(collaborator.id)}
+                          disabled={loadingId === collaborator.id}
+                          loading={loadingId === collaborator.id}
+                          aria-label="Confirm removal"
+                        >
+                          Remove
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={handleCancelRemove}
+                          disabled={loadingId === collaborator.id}
+                          aria-label="Cancel removal"
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => handleRemoveClick(collaborator.id)}
+                        disabled={loadingId === collaborator.id}
+                        aria-label={`Remove ${collaborator.name} from project`}
+                        className={cn(
+                          'p-1 rounded-md text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors',
+                          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                          'disabled:opacity-50 disabled:cursor-not-allowed'
+                        )}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </>
                 ) : (
                   <span
                     className={cn(
