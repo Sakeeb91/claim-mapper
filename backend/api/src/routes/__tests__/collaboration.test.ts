@@ -480,9 +480,9 @@ describe('Collaboration API', () => {
         },
       ];
 
-      let allActivities: any[] = [];
+      const allActivities: unknown[] = [];
       for (const session of sessions) {
-        const sessionActivities = session.activities.map((a: any) => a.toObject());
+        const sessionActivities = session.activities.map((a: { toObject: () => unknown }) => a.toObject());
         allActivities.push(...sessionActivities);
       }
 

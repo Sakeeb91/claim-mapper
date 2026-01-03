@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import express from 'express';
 import { Request, Response } from 'express';
 import axios from 'axios';

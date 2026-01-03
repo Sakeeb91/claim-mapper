@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /**
  * Claims Routes Unit Tests - Part 2: Extended Operations
  * Tests evidence attachment, comments, relationships, and AI analysis

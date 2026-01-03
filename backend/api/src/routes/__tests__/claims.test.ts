@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /**
  * Claims Routes Unit Tests - Part 1: CRUD Operations
  * Tests claim creation, retrieval, update, and deletion

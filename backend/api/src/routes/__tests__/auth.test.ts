@@ -109,7 +109,8 @@ jest.mock('../../middleware/validation', () => ({
 }));
 
 jest.mock('../../middleware/errorHandler', () => ({
-  asyncHandler: (fn: Function) => fn,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  asyncHandler: (fn: (...args: any[]) => any) => fn,
   createError: jest.fn((message, status, code) => ({
     message,
     statusCode: status,

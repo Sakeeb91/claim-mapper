@@ -315,7 +315,7 @@ claimSchema.pre('save', function(next) {
 });
 
 // Static methods
-claimSchema.statics.findByProject = function(projectId: string, filters: any = {}) {
+claimSchema.statics.findByProject = function(projectId: string, filters: Record<string, unknown> = {}) {
   return this.find({ project: projectId, isActive: true, ...filters })
     .populate('creator', 'firstName lastName email')
     .populate('evidence')
@@ -324,15 +324,15 @@ claimSchema.statics.findByProject = function(projectId: string, filters: any = {
 };
 
 claimSchema.statics.searchText = function(query: string, projectId?: string) {
-  const searchConditions: any = {
+  const searchConditions: Record<string, unknown> = {
     $text: { $search: query },
     isActive: true,
   };
-  
+
   if (projectId) {
     searchConditions.project = projectId;
   }
-  
+
   return this.find(searchConditions, { score: { $meta: 'textScore' } })
     .sort({ score: { $meta: 'textScore' } })
     .populate('creator', 'firstName lastName email')

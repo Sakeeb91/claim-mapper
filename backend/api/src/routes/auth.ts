@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
 import express from 'express';
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
