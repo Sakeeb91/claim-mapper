@@ -54,7 +54,11 @@ jest.mock('../../models/User', () => {
     updateOne: jest.fn().mockResolvedValue({}),
   };
 
-  const MockUser = jest.fn().mockImplementation(() => mockUserInstance);
+  const MockUser = jest.fn().mockImplementation(() => mockUserInstance) as jest.Mock & {
+    findOne: jest.Mock;
+    findById: jest.Mock;
+    findByIdAndUpdate: jest.Mock;
+  };
   MockUser.findOne = jest.fn();
   MockUser.findById = jest.fn();
   MockUser.findByIdAndUpdate = jest.fn();

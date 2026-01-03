@@ -9,12 +9,14 @@ interface TestNode {
   id: string;
   type: string;
   label?: string;
+  [key: string]: unknown;
 }
 
 interface TestLink {
-  source: string;
-  target: string;
+  source: string | { id: string };
+  target: string | { id: string };
   type?: string;
+  [key: string]: unknown;
 }
 
 describe('GraphAnalyzer', () => {
@@ -209,10 +211,10 @@ describe('GraphAnalyzer', () => {
     describe('Degree Calculation', () => {
       it('should identify most connected node', () => {
         const nodes = [
-          { id: 'hub' },
-          { id: '1' },
-          { id: '2' },
-          { id: '3' },
+          { id: 'hub', type: 'claim' },
+          { id: '1', type: 'claim' },
+          { id: '2', type: 'claim' },
+          { id: '3', type: 'claim' },
         ];
         const links = [
           { source: 'hub', target: '1' },
@@ -228,9 +230,9 @@ describe('GraphAnalyzer', () => {
 
       it('should calculate degrees for all nodes', () => {
         const nodes = [
-          { id: '1' },
-          { id: '2' },
-          { id: '3' },
+          { id: '1', type: 'claim' },
+          { id: '2', type: 'claim' },
+          { id: '3', type: 'claim' },
         ];
         const links = [
           { source: '1', target: '2' },
@@ -249,9 +251,9 @@ describe('GraphAnalyzer', () => {
 
       it('should return nodes sorted by degree descending', () => {
         const nodes = [
-          { id: 'low' },
-          { id: 'high' },
-          { id: 'medium' },
+          { id: 'low', type: 'claim' },
+          { id: 'high', type: 'claim' },
+          { id: 'medium', type: 'claim' },
         ];
         const links = [
           { source: 'high', target: 'low' },
@@ -261,14 +263,14 @@ describe('GraphAnalyzer', () => {
 
         const centralNodes = analyzer.findCentralNodes(nodes, links);
 
-        expect(centralNodes[0].degree).toBeGreaterThanOrEqual(centralNodes[1].degree);
-        expect(centralNodes[1].degree).toBeGreaterThanOrEqual(centralNodes[2].degree);
+        expect(centralNodes[0].degree as number).toBeGreaterThanOrEqual(centralNodes[1].degree as number);
+        expect(centralNodes[1].degree as number).toBeGreaterThanOrEqual(centralNodes[2].degree as number);
       });
     });
 
     describe('Limit Parameter', () => {
       it('should respect limit parameter', () => {
-        const nodes = Array.from({ length: 20 }, (_, i) => ({ id: `node-${i}` }));
+        const nodes = Array.from({ length: 20 }, (_, i) => ({ id: `node-${i}`, type: 'claim' }));
         const links = nodes.slice(1).map(node => ({
           source: 'node-0',
           target: node.id,
@@ -281,8 +283,8 @@ describe('GraphAnalyzer', () => {
 
       it('should return all nodes if limit exceeds node count', () => {
         const nodes = [
-          { id: '1' },
-          { id: '2' },
+          { id: '1', type: 'claim' },
+          { id: '2', type: 'claim' },
         ];
         const links = [{ source: '1', target: '2' }];
 
@@ -292,7 +294,7 @@ describe('GraphAnalyzer', () => {
       });
 
       it('should default to limit of 10', () => {
-        const nodes = Array.from({ length: 20 }, (_, i) => ({ id: `node-${i}` }));
+        const nodes = Array.from({ length: 20 }, (_, i) => ({ id: `node-${i}`, type: 'claim' }));
         const links = nodes.slice(1).map(node => ({
           source: 'node-0',
           target: node.id,
@@ -316,9 +318,9 @@ describe('GraphAnalyzer', () => {
 
       it('should handle nodes with no connections', () => {
         const nodes = [
-          { id: '1' },
-          { id: '2' },
-          { id: '3' },
+          { id: '1', type: 'claim' },
+          { id: '2', type: 'claim' },
+          { id: '3', type: 'claim' },
         ];
         const links: TestLink[] = [];
 
@@ -332,16 +334,16 @@ describe('GraphAnalyzer', () => {
 
       it('should handle link objects with nested source/target', () => {
         const nodes = [
-          { id: '1' },
-          { id: '2' },
-          { id: '3' },
+          { id: '1', type: 'claim' },
+          { id: '2', type: 'claim' },
+          { id: '3', type: 'claim' },
         ];
         const links = [
           { source: { id: '1' }, target: { id: '2' } },
           { source: { id: '2' }, target: { id: '3' } },
         ];
 
-        const centralNodes = analyzer.findCentralNodes(nodes, links);
+        const centralNodes = analyzer.findCentralNodes(nodes, links as any);
 
         const node2 = centralNodes.find(n => n.id === '2');
         expect(node2?.degree).toBe(2);
@@ -365,9 +367,9 @@ describe('GraphAnalyzer', () => {
     describe('Tie Breaking', () => {
       it('should handle nodes with equal degrees', () => {
         const nodes = [
-          { id: '1' },
-          { id: '2' },
-          { id: '3' },
+          { id: '1', type: 'claim' },
+          { id: '2', type: 'claim' },
+          { id: '3', type: 'claim' },
         ];
         const links = [
           { source: '1', target: '2' },
@@ -389,12 +391,12 @@ describe('GraphAnalyzer', () => {
     it('should correctly analyze a social network-like graph', () => {
       // Simulate a small social network with influencers
       const nodes = [
-        { id: 'influencer1' },
-        { id: 'influencer2' },
-        { id: 'follower1' },
-        { id: 'follower2' },
-        { id: 'follower3' },
-        { id: 'follower4' },
+        { id: 'influencer1', type: 'user' },
+        { id: 'influencer2', type: 'user' },
+        { id: 'follower1', type: 'user' },
+        { id: 'follower2', type: 'user' },
+        { id: 'follower3', type: 'user' },
+        { id: 'follower4', type: 'user' },
       ];
       const links = [
         { source: 'influencer1', target: 'follower1' },
@@ -447,6 +449,7 @@ describe('GraphAnalyzer', () => {
       const nodeCount = 1000;
       const nodes = Array.from({ length: nodeCount }, (_, i) => ({
         id: `node-${i}`,
+        type: 'claim',
       }));
 
       // Create random links (approximately 2 links per node on average)

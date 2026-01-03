@@ -6,12 +6,16 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
-interface AuthenticatedRequest extends Request {
+interface AuthenticatedRequest extends Omit<Request, 'user'> {
   user?: {
     id: string;
+    _id?: { toString: () => string };
     email: string;
     role: string;
     name?: string;
+    isActive?: boolean;
+    isVerified?: boolean;
+    toJSON?: () => Record<string, unknown>;
   };
 }
 
@@ -73,11 +77,12 @@ describe('Auth Middleware', () => {
 
   const mockUser = {
     _id: { toString: () => 'user-123' },
+    id: 'user-123',
     email: 'test@example.com',
     role: 'user',
     isActive: true,
     isVerified: true,
-    toJSON: () => ({ _id: 'user-123', email: 'test@example.com', role: 'user' }),
+    toJSON: () => ({ _id: 'user-123', id: 'user-123', email: 'test@example.com', role: 'user' }),
   };
 
   beforeEach(() => {
@@ -491,7 +496,7 @@ describe('Auth Middleware', () => {
     });
 
     it('should check specific permission if required', async () => {
-      (mockReq as AuthenticatedRequest).user ={ ...mockUser, _id: { toString: () => 'collaborator-123' } };
+      (mockReq as AuthenticatedRequest).user = { ...mockUser, id: 'collaborator-123', _id: { toString: () => 'collaborator-123' } };
       mockReq.params = { projectId: 'project-123' };
 
       const projectWithLimitedPermission = {

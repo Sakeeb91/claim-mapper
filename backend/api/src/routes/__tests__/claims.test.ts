@@ -70,7 +70,7 @@ describe('Claims Routes - CRUD Operations', () => {
     versions: [],
     comments: [],
     save: jest.fn().mockResolvedValue(true),
-    populate: jest.fn().mockResolvedThis(),
+    populate: jest.fn().mockReturnThis(),
   };
 
   beforeEach(() => {
@@ -158,7 +158,7 @@ describe('Claims Routes - CRUD Operations', () => {
 
       it('should build sort object correctly', () => {
         const sort = 'updatedAt';
-        const order = 'desc';
+        const order = 'desc' as 'asc' | 'desc';
         const sortObj: Record<string, number> = {};
         sortObj[sort] = order === 'asc' ? 1 : -1;
 
@@ -208,25 +208,25 @@ describe('Claims Routes - CRUD Operations', () => {
       });
 
       it('should allow access to public projects', () => {
-        const visibility = 'public';
+        const visibility: 'public' | 'private' = 'public';
         const userId = 'random-user';
         const projectOwnerId = 'owner-id';
 
         const hasAccess =
-          projectOwnerId === userId ||
+          (projectOwnerId as string) === (userId as string) ||
           visibility === 'public';
 
         expect(hasAccess).toBe(true);
       });
 
       it('should deny access to private project for non-members', () => {
-        const visibility = 'private';
+        const visibility = 'private' as 'public' | 'private';
         const userId = 'random-user';
         const projectOwnerId = 'owner-id';
         const collaborators: Array<{ user: string }> = [];
 
         const hasAccess =
-          projectOwnerId === userId ||
+          (projectOwnerId as string) === (userId as string) ||
           collaborators.some((c) => c.user === userId) ||
           visibility === 'public';
 
@@ -463,8 +463,8 @@ describe('Claims Routes - CRUD Operations', () => {
 
     describe('Version Tracking', () => {
       it('should create version when text changes', () => {
-        const originalText = 'Original claim text';
-        const newText = 'Updated claim text';
+        const originalText: string = 'Original claim text';
+        const newText: string = 'Updated claim text';
         const versions: Array<{
           versionNumber: number;
           text: string;

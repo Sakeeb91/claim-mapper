@@ -402,29 +402,23 @@ describe('Projects Routes', () => {
     });
 
     describe('Permission Assignment', () => {
+      const getPermissions = (role: 'editor' | 'admin' | 'viewer') => ({
+        canEdit: role === 'editor' || role === 'admin',
+        canDelete: role === 'admin',
+        canInvite: role === 'admin',
+        canExport: true,
+        canManageSettings: role === 'admin',
+      });
+
       it('should set permissions based on role', () => {
-        const role = 'editor';
-        const permissions = {
-          canEdit: role === 'editor' || role === 'admin',
-          canDelete: role === 'admin',
-          canInvite: role === 'admin',
-          canExport: true,
-          canManageSettings: role === 'admin',
-        };
+        const permissions = getPermissions('editor');
 
         expect(permissions.canEdit).toBe(true);
         expect(permissions.canDelete).toBe(false);
       });
 
       it('should give admin all permissions', () => {
-        const role = 'admin';
-        const permissions = {
-          canEdit: role === 'editor' || role === 'admin',
-          canDelete: role === 'admin',
-          canInvite: role === 'admin',
-          canExport: true,
-          canManageSettings: role === 'admin',
-        };
+        const permissions = getPermissions('admin');
 
         expect(permissions.canEdit).toBe(true);
         expect(permissions.canDelete).toBe(true);

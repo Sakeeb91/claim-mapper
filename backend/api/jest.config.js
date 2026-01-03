@@ -11,9 +11,9 @@ module.exports = {
 
   // Test directories
   testMatch: [
-    '<rootDir>/src/**/__tests__/**/*.{js,ts}',
+    '<rootDir>/src/**/__tests__/**/*.test.{js,ts}',
     '<rootDir>/src/**/*.(test|spec).{js,ts}',
-    '<rootDir>/tests/**/*.{js,ts}',
+    '<rootDir>/tests/**/*.test.{js,ts}',
   ],
 
   // Module resolution

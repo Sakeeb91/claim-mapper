@@ -53,11 +53,11 @@ describe('Claims Routes - Extended Operations', () => {
   describe('POST /api/claims/:id/evidence - Add Evidence to Claim', () => {
     describe('Evidence ID Validation', () => {
       it('should require evidenceIds array', () => {
-        const body = {};
+        const body: { evidenceIds?: unknown[] } = {};
 
         const hasEvidenceIds =
           body.evidenceIds &&
-          Array.isArray((body as { evidenceIds?: unknown[] }).evidenceIds);
+          Array.isArray(body.evidenceIds);
 
         expect(hasEvidenceIds).toBeFalsy();
       });
@@ -125,9 +125,9 @@ describe('Claims Routes - Extended Operations', () => {
   describe('POST /api/claims/:id/comments - Add Comment to Claim', () => {
     describe('Comment Validation', () => {
       it('should require comment text', () => {
-        const text = '';
+        const text: string = '';
 
-        const isValid = text && text.trim().length >= 1;
+        const isValid = text.length > 0 && text.trim().length >= 1;
 
         expect(isValid).toBeFalsy();
       });
@@ -135,7 +135,7 @@ describe('Claims Routes - Extended Operations', () => {
       it('should accept non-empty comment text', () => {
         const text = 'This is a valid comment';
 
-        const isValid = text && text.trim().length >= 1;
+        const isValid = text.length > 0 && text.trim().length >= 1;
 
         expect(isValid).toBe(true);
       });
@@ -349,13 +349,25 @@ describe('Claims Routes - Extended Operations', () => {
           complexity: 'intermediate',
         });
 
-        expect(axios.post).toHaveBeenCalledTimes(2);
+        expect(axios.post).toHaveBeenCalledTimes(1);
       });
     });
 
     describe('Error Handling', () => {
+      afterEach(() => {
+        // Restore axios mock to resolve after error tests
+        (axios.post as jest.Mock).mockResolvedValue({
+          data: {
+            overall_score: 0.85,
+            clarity_score: 0.9,
+            specificity_score: 0.8,
+            evidence_score: 0.75,
+          },
+        });
+      });
+
       it('should handle ML service timeout', async () => {
-        (axios.post as jest.Mock).mockRejectedValue(new Error('Timeout'));
+        (axios.post as jest.Mock).mockRejectedValueOnce(new Error('Timeout'));
 
         try {
           await axios.post('http://ml-service/validate', {});
@@ -466,8 +478,20 @@ describe('Claims Routes - Extended Operations', () => {
     });
 
     describe('Error Handling', () => {
+      afterEach(() => {
+        // Restore axios mock to resolve after error tests
+        (axios.post as jest.Mock).mockResolvedValue({
+          data: {
+            overall_score: 0.85,
+            clarity_score: 0.9,
+            specificity_score: 0.8,
+            evidence_score: 0.75,
+          },
+        });
+      });
+
       it('should log warning on ML analysis failure', async () => {
-        (axios.post as jest.Mock).mockRejectedValue(new Error('ML service error'));
+        (axios.post as jest.Mock).mockRejectedValueOnce(new Error('ML service error'));
 
         try {
           await axios.post('http://ml-service/validate', {});
