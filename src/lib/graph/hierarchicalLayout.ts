@@ -223,3 +223,67 @@ export function releaseHierarchicalPositions(nodes: GraphNode[]): GraphNode[] {
   });
   return nodes;
 }
+
+/**
+ * Checks if a node is a reasoning node that should be hierarchically laid out.
+ *
+ * @param node - Graph node to check
+ * @returns True if node should be in hierarchical layout
+ */
+export function isReasoningLayoutNode(node: GraphNode): boolean {
+  return node.type === 'reasoning' && node.level !== undefined;
+}
+
+/**
+ * Separates nodes into those that should use hierarchical layout
+ * and those that should use force-directed layout.
+ *
+ * @param nodes - All graph nodes
+ * @returns Object with hierarchical and force-directed node arrays
+ */
+export function partitionNodesByLayoutType(nodes: GraphNode[]): {
+  hierarchical: GraphNode[];
+  forceDirected: GraphNode[];
+} {
+  const hierarchical: GraphNode[] = [];
+  const forceDirected: GraphNode[] = [];
+
+  nodes.forEach((node) => {
+    if (isReasoningLayoutNode(node)) {
+      hierarchical.push(node);
+    } else {
+      forceDirected.push(node);
+    }
+  });
+
+  return { hierarchical, forceDirected };
+}
+
+/**
+ * Applies hybrid layout: hierarchical for reasoning nodes,
+ * force-directed for everything else.
+ *
+ * This is the main entry point for layout integration with D3.
+ * It positions reasoning nodes hierarchically and leaves other
+ * nodes to be positioned by the force simulation.
+ *
+ * @param nodes - All graph nodes
+ * @param links - All graph links
+ * @param config - Layout configuration
+ * @param useHierarchical - Whether to use hierarchical layout for reasoning
+ * @returns Modified nodes array
+ */
+export function applyHybridLayout(
+  nodes: GraphNode[],
+  links: GraphLink[],
+  config: HierarchicalLayoutConfig,
+  useHierarchical: boolean = true
+): GraphNode[] {
+  if (!useHierarchical) {
+    // Release any fixed positions
+    return releaseHierarchicalPositions(nodes);
+  }
+
+  // Apply hierarchical layout to reasoning nodes
+  return applyHierarchicalLayout(nodes, links, config);
+}
