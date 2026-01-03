@@ -3,7 +3,19 @@
  * Tests graph metrics calculation and central node identification
  */
 
-import { GraphAnalyzer, GraphMetrics } from '../analyzer';
+import { GraphAnalyzer } from '../analyzer';
+
+interface TestNode {
+  id: string;
+  type: string;
+  label?: string;
+}
+
+interface TestLink {
+  source: string;
+  target: string;
+  type?: string;
+}
 
 describe('GraphAnalyzer', () => {
   let analyzer: GraphAnalyzer;
@@ -16,11 +28,11 @@ describe('GraphAnalyzer', () => {
     describe('Basic Counts', () => {
       it('should return correct node count', () => {
         const nodes = [
-          { id: '1' },
-          { id: '2' },
-          { id: '3' },
+          { id: '1', type: 'claim' },
+          { id: '2', type: 'claim' },
+          { id: '3', type: 'claim' },
         ];
-        const links: any[] = [];
+        const links: TestLink[] = [];
 
         const metrics = analyzer.calculateMetrics(nodes, links);
 
@@ -28,7 +40,7 @@ describe('GraphAnalyzer', () => {
       });
 
       it('should return correct link count', () => {
-        const nodes = [{ id: '1' }, { id: '2' }];
+        const nodes = [{ id: '1', type: 'claim' }, { id: '2', type: 'claim' }];
         const links = [
           { source: '1', target: '2' },
         ];
@@ -39,8 +51,8 @@ describe('GraphAnalyzer', () => {
       });
 
       it('should handle empty graph', () => {
-        const nodes: any[] = [];
-        const links: any[] = [];
+        const nodes: TestNode[] = [];
+        const links: TestLink[] = [];
 
         const metrics = analyzer.calculateMetrics(nodes, links);
 
@@ -55,9 +67,9 @@ describe('GraphAnalyzer', () => {
       it('should calculate density correctly for complete graph', () => {
         // Complete graph with 3 nodes has 3 edges (n*(n-1)/2 = 3)
         const nodes = [
-          { id: '1' },
-          { id: '2' },
-          { id: '3' },
+          { id: '1', type: 'claim' },
+          { id: '2', type: 'claim' },
+          { id: '3', type: 'claim' },
         ];
         const links = [
           { source: '1', target: '2' },
@@ -75,10 +87,10 @@ describe('GraphAnalyzer', () => {
         // Max possible edges = 4*3/2 = 6
         // Density = 2/6 = 0.333...
         const nodes = [
-          { id: '1' },
-          { id: '2' },
-          { id: '3' },
-          { id: '4' },
+          { id: '1', type: 'claim' },
+          { id: '2', type: 'claim' },
+          { id: '3', type: 'claim' },
+          { id: '4', type: 'claim' },
         ];
         const links = [
           { source: '1', target: '2' },
@@ -91,8 +103,8 @@ describe('GraphAnalyzer', () => {
       });
 
       it('should return 0 density for single node', () => {
-        const nodes = [{ id: '1' }];
-        const links: any[] = [];
+        const nodes = [{ id: '1', type: 'claim' }];
+        const links: TestLink[] = [];
 
         const metrics = analyzer.calculateMetrics(nodes, links);
 
@@ -101,11 +113,11 @@ describe('GraphAnalyzer', () => {
 
       it('should handle disconnected graph', () => {
         const nodes = [
-          { id: '1' },
-          { id: '2' },
-          { id: '3' },
+          { id: '1', type: 'claim' },
+          { id: '2', type: 'claim' },
+          { id: '3', type: 'claim' },
         ];
-        const links: any[] = []; // No connections
+        const links: TestLink[] = []; // No connections
 
         const metrics = analyzer.calculateMetrics(nodes, links);
 
@@ -120,9 +132,9 @@ describe('GraphAnalyzer', () => {
         // Average = (1+2+1)/3 = 4/3 ≈ 1.33
         // Formula: 2*links/nodes = 2*2/3 ≈ 1.33
         const nodes = [
-          { id: '1' },
-          { id: '2' },
-          { id: '3' },
+          { id: '1', type: 'claim' },
+          { id: '2', type: 'claim' },
+          { id: '3', type: 'claim' },
         ];
         const links = [
           { source: '1', target: '2' },
@@ -135,8 +147,8 @@ describe('GraphAnalyzer', () => {
       });
 
       it('should return 0 average degree for single node', () => {
-        const nodes = [{ id: '1' }];
-        const links: any[] = [];
+        const nodes = [{ id: '1', type: 'claim' }];
+        const links: TestLink[] = [];
 
         const metrics = analyzer.calculateMetrics(nodes, links);
 
@@ -149,11 +161,11 @@ describe('GraphAnalyzer', () => {
         // Average = (4+1+1+1+1)/5 = 8/5 = 1.6
         // Formula: 2*4/5 = 1.6
         const nodes = [
-          { id: 'center' },
-          { id: '1' },
-          { id: '2' },
-          { id: '3' },
-          { id: '4' },
+          { id: 'center', type: 'claim' },
+          { id: '1', type: 'claim' },
+          { id: '2', type: 'claim' },
+          { id: '3', type: 'claim' },
+          { id: '4', type: 'claim' },
         ];
         const links = [
           { source: 'center', target: '1' },
@@ -170,8 +182,8 @@ describe('GraphAnalyzer', () => {
 
     describe('Return Type', () => {
       it('should return all required metric fields', () => {
-        const nodes = [{ id: '1' }];
-        const links: any[] = [];
+        const nodes = [{ id: '1', type: 'claim' }];
+        const links: TestLink[] = [];
 
         const metrics = analyzer.calculateMetrics(nodes, links);
 
@@ -183,7 +195,7 @@ describe('GraphAnalyzer', () => {
       });
 
       it('should return clusters as 0 (placeholder)', () => {
-        const nodes = [{ id: '1' }, { id: '2' }];
+        const nodes = [{ id: '1', type: 'claim' }, { id: '2', type: 'claim' }];
         const links = [{ source: '1', target: '2' }];
 
         const metrics = analyzer.calculateMetrics(nodes, links);
@@ -294,8 +306,8 @@ describe('GraphAnalyzer', () => {
 
     describe('Edge Cases', () => {
       it('should handle empty nodes array', () => {
-        const nodes: any[] = [];
-        const links: any[] = [];
+        const nodes: TestNode[] = [];
+        const links: TestLink[] = [];
 
         const centralNodes = analyzer.findCentralNodes(nodes, links);
 
@@ -308,7 +320,7 @@ describe('GraphAnalyzer', () => {
           { id: '2' },
           { id: '3' },
         ];
-        const links: any[] = [];
+        const links: TestLink[] = [];
 
         const centralNodes = analyzer.findCentralNodes(nodes, links);
 
