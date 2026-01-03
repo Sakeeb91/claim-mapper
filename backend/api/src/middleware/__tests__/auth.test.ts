@@ -416,6 +416,7 @@ describe('Auth Middleware', () => {
       await middleware(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockNext).toHaveBeenCalled();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect((mockReq as any).project).toBeDefined();
     });
 
@@ -598,6 +599,7 @@ describe('Auth Middleware', () => {
     it('should generate a JWT token', () => {
       (jwt.sign as jest.Mock).mockReturnValue('generated-token');
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const token = generateToken(mockUser as any);
 
       expect(jwt.sign).toHaveBeenCalledWith(
@@ -621,6 +623,7 @@ describe('Auth Middleware', () => {
     it('should generate a refresh token', () => {
       (jwt.sign as jest.Mock).mockReturnValue('generated-refresh-token');
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const token = generateRefreshToken(mockUser as any);
 
       expect(jwt.sign).toHaveBeenCalledWith(

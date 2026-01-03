@@ -343,6 +343,7 @@ describe('GraphAnalyzer', () => {
           { source: { id: '2' }, target: { id: '3' } },
         ];
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const centralNodes = analyzer.findCentralNodes(nodes, links as any);
 
         const node2 = centralNodes.find(n => n.id === '2');
@@ -434,6 +435,9 @@ describe('GraphAnalyzer', () => {
 
       const metrics = analyzer.calculateMetrics(nodes, links);
       const centralNodes = analyzer.findCentralNodes(nodes, links);
+
+      expect(metrics.nodeCount).toBe(5);
+      expect(metrics.linkCount).toBe(4);
 
       // Claim1 has most evidence supporting it
       const claim1 = centralNodes.find(n => n.id === 'claim1');

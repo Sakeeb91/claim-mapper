@@ -4,7 +4,7 @@
  */
 
 import mongoose from 'mongoose';
-import Claim, { IClaim } from '../Claim';
+import Claim from '../Claim';
 
 describe('Claim Model', () => {
   const validClaimData = {

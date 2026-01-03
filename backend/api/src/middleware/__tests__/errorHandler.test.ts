@@ -344,6 +344,7 @@ describe('Error Handler Middleware', () => {
     });
 
     it('should include user ID in error log if authenticated', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (mockReq as any).user = { _id: 'user-123' };
 
       const error = new Error('Error with user');
@@ -530,6 +531,7 @@ describe('Error Handler Middleware', () => {
     });
 
     it('should track error by user if authenticated', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (mockReq as any).user = { _id: 'user-456' };
 
       const error = createError('User error', 400);

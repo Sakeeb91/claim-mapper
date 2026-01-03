@@ -3,8 +3,6 @@
  * Tests the User Mongoose schema, validation, and instance methods
  */
 
-import mongoose from 'mongoose';
-
 // Mock bcrypt before importing User model
 jest.mock('bcryptjs', () => ({
   genSalt: jest.fn().mockResolvedValue('$2b$10$salt'),
@@ -16,7 +14,7 @@ jest.mock('bcryptjs', () => ({
   ),
 }));
 
-import User, { IUser } from '../User';
+import User from '../User';
 import bcrypt from 'bcryptjs';
 
 describe('User Model', () => {

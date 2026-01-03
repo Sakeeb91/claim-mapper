@@ -4,7 +4,7 @@
  */
 
 import mongoose from 'mongoose';
-import Project, { IProject } from '../Project';
+import Project from '../Project';
 
 describe('Project Model', () => {
   const validProjectData = {
@@ -715,6 +715,7 @@ describe('Project Model', () => {
           ],
         });
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         expect(project.hasPermission(collaboratorId.toString(), 'nonExistent' as any)).toBe(false);
       });
     });
