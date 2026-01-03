@@ -1,21 +1,45 @@
 'use client';
 
 import { HTMLAttributes, forwardRef } from 'react';
+import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/utils';
 
-export interface CardProps extends HTMLAttributes<HTMLDivElement> {
+const cardVariants = cva(
+  'rounded-lg border bg-card text-card-foreground',
+  {
+    variants: {
+      variant: {
+        default: 'border-border shadow-sm',
+        elevated: 'border-transparent shadow-md hover:shadow-lg transition-shadow',
+        outlined: 'border-border shadow-none',
+        ghost: 'border-transparent bg-transparent shadow-none',
+      },
+      padding: {
+        none: '',
+        sm: 'p-3',
+        md: 'p-4',
+        lg: 'p-6',
+      },
+    },
+    defaultVariants: {
+      variant: 'default',
+      padding: 'none',
+    },
+  }
+);
+
+export interface CardProps
+  extends HTMLAttributes<HTMLDivElement>,
+    VariantProps<typeof cardVariants> {
   children: React.ReactNode;
 }
 
 const Card = forwardRef<HTMLDivElement, CardProps>(
-  ({ className, children, ...props }, ref) => {
+  ({ className, variant, padding, children, ...props }, ref) => {
     return (
       <div
         ref={ref}
-        className={cn(
-          'rounded-lg border border-border bg-card text-card-foreground shadow-sm',
-          className
-        )}
+        className={cn(cardVariants({ variant, padding, className }))}
         {...props}
       >
         {children}
@@ -26,4 +50,4 @@ const Card = forwardRef<HTMLDivElement, CardProps>(
 
 Card.displayName = 'Card';
 
-export { Card };
+export { Card, cardVariants };
