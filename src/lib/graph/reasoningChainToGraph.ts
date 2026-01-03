@@ -16,6 +16,16 @@ import type {
 } from '@/types';
 
 /**
+ * Linked evidence data structure (from backend)
+ */
+export interface EvidenceInfo {
+  id: string;
+  text: string;
+  relationship?: 'supports' | 'refutes' | 'partial_support' | 'partial_refute' | 'neutral';
+  confidence?: number;
+}
+
+/**
  * Configuration options for the transformation
  */
 export interface ReasoningChainTransformOptions {
@@ -27,13 +37,16 @@ export interface ReasoningChainTransformOptions {
   includeConclusionToClaimLink?: boolean;
   /** Preferred layout type */
   layout?: ReasoningLayoutType;
+  /** Map of evidence IDs to evidence info (for creating evidence links) */
+  evidenceMap?: Map<string, EvidenceInfo>;
 }
 
-const DEFAULT_OPTIONS: Required<ReasoningChainTransformOptions> = {
+const DEFAULT_OPTIONS: Omit<Required<ReasoningChainTransformOptions>, 'evidenceMap'> & { evidenceMap?: Map<string, EvidenceInfo> } = {
   maxLabelLength: 50,
   includeEvidenceLinks: true,
   includeConclusionToClaimLink: true,
   layout: 'hierarchical',
+  evidenceMap: undefined,
 };
 
 /**
@@ -106,6 +119,11 @@ export function reasoningChainToGraph(
   // Create dependency links from structure.dependencies (if available)
   // The backend model has: { from: number, to: number, relationship: string }
   createDependencyLinks(chain, links);
+
+  // Create evidence-to-premise links if enabled and evidence map provided
+  if (opts.includeEvidenceLinks) {
+    createEvidenceToPremiseLinks(chain, links, opts.evidenceMap);
+  }
 
   return {
     nodes,
@@ -201,4 +219,94 @@ function createSequentialLinks(chain: ReasoningChain, links: GraphLink[]): void 
       },
     });
   }
+}
+
+/**
+ * Creates links from evidence nodes to premise steps.
+ * Uses linkedEvidence from step metadata (populated by semantic linking pipeline)
+ * or falls back to evidence map if provided.
+ *
+ * @param chain - The reasoning chain
+ * @param links - Array to add links to (mutated)
+ * @param evidenceMap - Optional map of evidence IDs to evidence info
+ */
+function createEvidenceToPremiseLinks(
+  chain: ReasoningChain,
+  links: GraphLink[],
+  evidenceMap?: Map<string, EvidenceInfo>
+): void {
+  // Access extended step data that may include linkedEvidence
+  const chainData = chain as ReasoningChain & {
+    steps: Array<ReasoningStep & {
+      metadata?: {
+        linkedEvidence?: Array<{
+          evidenceId: string;
+          relationship: string;
+          confidence?: number;
+        }>;
+      };
+    }>;
+  };
+
+  chainData.steps.forEach((step) => {
+    // Only link evidence to premises (and assumptions/observations)
+    if (step.type !== 'premise' && step.type !== 'assumption' && step.type !== 'observation') {
+      return;
+    }
+
+    const linkedEvidence = step.metadata?.linkedEvidence || [];
+    const stepNodeId = `step-${chain.id}-${step.order}`;
+
+    linkedEvidence.forEach((evidence) => {
+      const linkId = `ev-${evidence.evidenceId}-${chain.id}-${step.order}`;
+
+      // Determine link type based on relationship
+      let linkType: GraphLink['type'] = 'supports';
+      if (evidence.relationship === 'refutes' || evidence.relationship === 'partial_refute') {
+        linkType = 'contradicts';
+      }
+
+      links.push({
+        id: linkId,
+        source: evidence.evidenceId,
+        target: stepNodeId,
+        type: linkType,
+        strength: evidence.confidence || 0.7,
+        label: evidence.relationship,
+        curved: true, // Curve evidence links to distinguish from reasoning flow
+        data: {
+          relationship: 'evidence-to-premise',
+          isLogicalFlow: false,
+          chainId: chain.id,
+        },
+      });
+    });
+
+    // Fallback: use evidenceMap if no linkedEvidence in metadata
+    if (linkedEvidence.length === 0 && evidenceMap) {
+      evidenceMap.forEach((evidence, evidenceId) => {
+        // Simple heuristic: link all evidence to all premises
+        // In production, this would use semantic similarity
+        const linkId = `ev-map-${evidenceId}-${chain.id}-${step.order}`;
+
+        const linkType = evidence.relationship === 'refutes' ||
+          evidence.relationship === 'partial_refute' ? 'contradicts' : 'supports';
+
+        links.push({
+          id: linkId,
+          source: evidenceId,
+          target: stepNodeId,
+          type: linkType,
+          strength: evidence.confidence || 0.5,
+          label: evidence.relationship || 'supports',
+          curved: true,
+          data: {
+            relationship: 'evidence-to-premise',
+            isLogicalFlow: false,
+            chainId: chain.id,
+          },
+        });
+      });
+    }
+  });
 }
