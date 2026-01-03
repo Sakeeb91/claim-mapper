@@ -6,6 +6,9 @@ import { logger as loggerInstance } from './logger';
 export { logger, Logger, ChildLogger } from './logger';
 export type { LogLevel, LogContext } from './logger';
 
+// Re-export graph export utilities
+export * from './graphExport';
+
 // Internal logger reference for use in this file
 const logger = loggerInstance;
 
