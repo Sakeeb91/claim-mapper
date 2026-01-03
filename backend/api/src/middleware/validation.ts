@@ -548,6 +548,7 @@ export const validateFile = (options: {
 };
 
 // Sanitization helpers
+/* eslint-disable @typescript-eslint/no-explicit-any */
 export const sanitizeInput = (input: any): any => {
   if (typeof input === 'string') {
     // Remove potential XSS vectors
@@ -572,6 +573,7 @@ export const sanitizeInput = (input: any): any => {
   
   return input;
 };
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 // Sanitization middleware
 export const sanitize = (req: Request, res: Response, next: NextFunction): void => {

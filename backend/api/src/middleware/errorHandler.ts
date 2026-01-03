@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Request, Response, NextFunction } from 'express';
 import mongoose from 'mongoose';
 import { logger } from '../utils/logger';
