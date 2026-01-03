@@ -28,6 +28,51 @@ export interface ReasoningPathOverlayProps {
   animate?: boolean;
   /** Animation duration in ms */
   animationDuration?: number;
+  /** Callback to update path positions (called from simulation tick) */
+  onPathsUpdated?: () => void;
+}
+
+/**
+ * Generates a curved path between two points.
+ * Uses a quadratic bezier curve for smooth visual flow.
+ */
+function generateCurvedPath(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  curvature: number = 0.2
+): string {
+  const midX = (x1 + x2) / 2;
+  const midY = (y1 + y2) / 2;
+
+  // Offset control point perpendicular to the line
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const len = Math.sqrt(dx * dx + dy * dy);
+
+  if (len === 0) return `M${x1},${y1}L${x2},${y2}`;
+
+  // Perpendicular offset
+  const offsetX = -(dy / len) * len * curvature;
+  const offsetY = (dx / len) * len * curvature;
+
+  const ctrlX = midX + offsetX;
+  const ctrlY = midY + offsetY;
+
+  return `M${x1},${y1}Q${ctrlX},${ctrlY} ${x2},${y2}`;
+}
+
+/**
+ * Generates a straight path between two points.
+ */
+function generateStraightPath(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number
+): string {
+  return `M${x1},${y1}L${x2},${y2}`;
 }
 
 /**
@@ -127,12 +172,40 @@ function createArrowMarkers(
     .attr('fill', REASONING_STEP_COLORS.conclusion);
 }
 
+/**
+ * Updates path positions based on current node positions.
+ * Call this from the D3 simulation tick handler.
+ */
+export function updateReasoningPaths(
+  pathGroup: d3.Selection<SVGGElement, unknown, null, undefined>,
+  links: GraphLink[]
+): void {
+  pathGroup.selectAll<SVGPathElement, GraphLink>('.reasoning-path')
+    .attr('d', (d) => {
+      const source = d.source as { x?: number; y?: number };
+      const target = d.target as { x?: number; y?: number };
+
+      if (source.x === undefined || source.y === undefined ||
+          target.x === undefined || target.y === undefined) {
+        return '';
+      }
+
+      // Use curved paths for evidence links, straight for reasoning flow
+      if (d.curved || d.data?.relationship === 'evidence-to-premise') {
+        return generateCurvedPath(source.x, source.y, target.x, target.y);
+      }
+
+      return generateStraightPath(source.x, source.y, target.x, target.y);
+    });
+}
+
 export function ReasoningPathOverlay({
   svgRef,
   reasoningLinks,
   highlightedChainId,
   animate = true,
   animationDuration = 500,
+  onPathsUpdated,
 }: ReasoningPathOverlayProps) {
   const pathGroupRef = useRef<d3.Selection<SVGGElement, unknown, null, undefined> | null>(null);
 
@@ -206,6 +279,13 @@ export function ReasoningPathOverlay({
           return 'url(#reasoning-arrow-highlighted)';
         }
         return 'url(#reasoning-arrow)';
+      })
+      .on('end', () => {
+        // Initial path position update
+        if (pathGroupRef.current) {
+          updateReasoningPaths(pathGroupRef.current, flowLinks);
+        }
+        onPathsUpdated?.();
       });
 
     // Cleanup on unmount
@@ -214,10 +294,23 @@ export function ReasoningPathOverlay({
         pathGroupRef.current.selectAll('.reasoning-path').remove();
       }
     };
-  }, [svgRef, reasoningLinks, highlightedChainId, animate, animationDuration]);
+  }, [svgRef, reasoningLinks, highlightedChainId, animate, animationDuration, onPathsUpdated]);
 
   // This component renders via D3, not React JSX
   return null;
+}
+
+/**
+ * Hook to get the reasoning paths group reference.
+ * Use this to update paths on simulation tick.
+ */
+export function getReasoningPathGroup(
+  svgRef: React.RefObject<SVGSVGElement>
+): d3.Selection<SVGGElement, unknown, null, undefined> | null {
+  if (!svgRef.current) return null;
+  const svg = d3.select(svgRef.current);
+  const group = svg.select<SVGGElement>('.reasoning-paths-group');
+  return group.empty() ? null : group;
 }
 
 export default ReasoningPathOverlay;
