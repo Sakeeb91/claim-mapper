@@ -1,0 +1,223 @@
+'use client';
+
+/**
+ * ReasoningPathOverlay Component
+ *
+ * Renders reasoning chain paths as an overlay on the knowledge graph.
+ * Shows the logical flow from premises through inferences to conclusions
+ * with animated gradient paths.
+ */
+
+import { useEffect, useRef } from 'react';
+import * as d3 from 'd3';
+import { GraphLink } from '@/types';
+import {
+  REASONING_STEP_COLORS,
+  REASONING_FLOW_GRADIENT,
+  REASONING_LINK_COLORS,
+} from '@/constants/graph';
+
+export interface ReasoningPathOverlayProps {
+  /** Reference to the parent SVG element */
+  svgRef: React.RefObject<SVGSVGElement>;
+  /** Links that represent reasoning flow (filtered to isLogicalFlow) */
+  reasoningLinks: GraphLink[];
+  /** Currently highlighted chain ID (or null for none) */
+  highlightedChainId: string | null;
+  /** Whether to animate the flow */
+  animate?: boolean;
+  /** Animation duration in ms */
+  animationDuration?: number;
+}
+
+/**
+ * Creates gradient definitions for reasoning flow visualization
+ */
+function createGradientDefs(
+  svg: d3.Selection<SVGSVGElement, unknown, null, undefined>
+): void {
+  // Get or create defs element
+  let defs = svg.select<SVGDefsElement>('defs');
+  if (defs.empty()) {
+    defs = svg.append('defs');
+  }
+
+  // Remove existing reasoning gradients
+  defs.selectAll('.reasoning-gradient').remove();
+
+  // Create main flow gradient
+  const flowGradient = defs.append('linearGradient')
+    .attr('id', 'reasoning-flow-gradient')
+    .attr('class', 'reasoning-gradient')
+    .attr('gradientUnits', 'userSpaceOnUse');
+
+  flowGradient.append('stop')
+    .attr('offset', '0%')
+    .attr('stop-color', REASONING_FLOW_GRADIENT.start);
+
+  flowGradient.append('stop')
+    .attr('offset', '50%')
+    .attr('stop-color', REASONING_FLOW_GRADIENT.middle);
+
+  flowGradient.append('stop')
+    .attr('offset', '100%')
+    .attr('stop-color', REASONING_FLOW_GRADIENT.end);
+
+  // Create highlighted gradient (brighter)
+  const highlightGradient = defs.append('linearGradient')
+    .attr('id', 'reasoning-flow-gradient-highlighted')
+    .attr('class', 'reasoning-gradient')
+    .attr('gradientUnits', 'userSpaceOnUse');
+
+  highlightGradient.append('stop')
+    .attr('offset', '0%')
+    .attr('stop-color', REASONING_STEP_COLORS.premise);
+
+  highlightGradient.append('stop')
+    .attr('offset', '50%')
+    .attr('stop-color', REASONING_STEP_COLORS.inference);
+
+  highlightGradient.append('stop')
+    .attr('offset', '100%')
+    .attr('stop-color', REASONING_STEP_COLORS.conclusion);
+}
+
+/**
+ * Creates arrow marker definitions
+ */
+function createArrowMarkers(
+  svg: d3.Selection<SVGSVGElement, unknown, null, undefined>
+): void {
+  let defs = svg.select<SVGDefsElement>('defs');
+  if (defs.empty()) {
+    defs = svg.append('defs');
+  }
+
+  // Remove existing reasoning markers
+  defs.selectAll('.reasoning-marker').remove();
+
+  // Create reasoning arrow marker
+  const reasoningArrow = defs.append('marker')
+    .attr('id', 'reasoning-arrow')
+    .attr('class', 'reasoning-marker')
+    .attr('viewBox', '0 -5 10 10')
+    .attr('refX', 20)
+    .attr('refY', 0)
+    .attr('markerWidth', 8)
+    .attr('markerHeight', 8)
+    .attr('orient', 'auto');
+
+  reasoningArrow.append('path')
+    .attr('d', 'M0,-5L10,0L0,5')
+    .attr('fill', REASONING_LINK_COLORS.requires);
+
+  // Create highlighted arrow marker
+  const highlightedArrow = defs.append('marker')
+    .attr('id', 'reasoning-arrow-highlighted')
+    .attr('class', 'reasoning-marker')
+    .attr('viewBox', '0 -5 10 10')
+    .attr('refX', 20)
+    .attr('refY', 0)
+    .attr('markerWidth', 10)
+    .attr('markerHeight', 10)
+    .attr('orient', 'auto');
+
+  highlightedArrow.append('path')
+    .attr('d', 'M0,-5L10,0L0,5')
+    .attr('fill', REASONING_STEP_COLORS.conclusion);
+}
+
+export function ReasoningPathOverlay({
+  svgRef,
+  reasoningLinks,
+  highlightedChainId,
+  animate = true,
+  animationDuration = 500,
+}: ReasoningPathOverlayProps) {
+  const pathGroupRef = useRef<d3.Selection<SVGGElement, unknown, null, undefined> | null>(null);
+
+  useEffect(() => {
+    if (!svgRef.current) return;
+
+    const svg = d3.select(svgRef.current);
+
+    // Create gradient and marker definitions
+    createGradientDefs(svg);
+    createArrowMarkers(svg);
+
+    // Get or create reasoning paths group
+    let pathGroup = svg.select<SVGGElement>('.reasoning-paths-group');
+    if (pathGroup.empty()) {
+      pathGroup = svg.select('.graph-container')
+        .insert('g', '.links') // Insert before links
+        .attr('class', 'reasoning-paths-group');
+    }
+    pathGroupRef.current = pathGroup;
+
+    // Filter to only logical flow links
+    const flowLinks = reasoningLinks.filter((link) => link.data?.isLogicalFlow);
+
+    // Update paths
+    const paths = pathGroup.selectAll<SVGPathElement, GraphLink>('.reasoning-path')
+      .data(flowLinks, (d) => d.id);
+
+    // Remove old paths
+    paths.exit()
+      .transition()
+      .duration(animationDuration / 2)
+      .attr('opacity', 0)
+      .remove();
+
+    // Add new paths
+    const pathsEnter = paths.enter()
+      .append('path')
+      .attr('class', 'reasoning-path')
+      .attr('fill', 'none')
+      .attr('opacity', 0);
+
+    // Update all paths
+    const pathsMerge = pathsEnter.merge(paths);
+
+    pathsMerge
+      .transition()
+      .duration(animate ? animationDuration : 0)
+      .attr('stroke', (d) => {
+        if (highlightedChainId && d.data?.chainId === highlightedChainId) {
+          return 'url(#reasoning-flow-gradient-highlighted)';
+        }
+        return d.type === 'contradicts'
+          ? REASONING_LINK_COLORS.contradicts
+          : REASONING_LINK_COLORS.requires;
+      })
+      .attr('stroke-width', (d) => {
+        if (highlightedChainId && d.data?.chainId === highlightedChainId) {
+          return 3;
+        }
+        return highlightedChainId ? 1 : 2;
+      })
+      .attr('opacity', (d) => {
+        if (highlightedChainId) {
+          return d.data?.chainId === highlightedChainId ? 1 : 0.2;
+        }
+        return 0.7;
+      })
+      .attr('marker-end', (d) => {
+        if (highlightedChainId && d.data?.chainId === highlightedChainId) {
+          return 'url(#reasoning-arrow-highlighted)';
+        }
+        return 'url(#reasoning-arrow)';
+      });
+
+    // Cleanup on unmount
+    return () => {
+      if (pathGroupRef.current) {
+        pathGroupRef.current.selectAll('.reasoning-path').remove();
+      }
+    };
+  }, [svgRef, reasoningLinks, highlightedChainId, animate, animationDuration]);
+
+  // This component renders via D3, not React JSX
+  return null;
+}
+
+export default ReasoningPathOverlay;
