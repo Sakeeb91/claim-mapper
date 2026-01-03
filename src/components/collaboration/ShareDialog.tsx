@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
-import { Share2, X } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { Share2 } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 import { Modal, Button, Input } from '@/components/ui';
-import { cn } from '@/utils';
+import { cn, isValidEmail } from '@/utils';
 
 export type ShareRole = 'viewer' | 'editor' | 'admin';
 
@@ -25,29 +26,68 @@ export function ShareDialog({
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<ShareRole>('editor');
   const [loading, setLoading] = useState(false);
+  const [emailError, setEmailError] = useState<string | undefined>();
+
+  const validateEmail = useCallback((value: string): boolean => {
+    if (!value.trim()) {
+      setEmailError('Email is required');
+      return false;
+    }
+    if (!isValidEmail(value)) {
+      setEmailError('Please enter a valid email address');
+      return false;
+    }
+    setEmailError(undefined);
+    return true;
+  }, []);
+
+  const handleEmailChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setEmail(value);
+    // Clear error on change, validate on blur
+    if (emailError && value.trim() && isValidEmail(value)) {
+      setEmailError(undefined);
+    }
+  }, [emailError]);
+
+  const handleEmailBlur = useCallback(() => {
+    if (email.trim()) {
+      validateEmail(email);
+    }
+  }, [email, validateEmail]);
 
   const handleInvite = async () => {
-    if (!email.trim()) return;
+    if (!validateEmail(email)) return;
 
     setLoading(true);
     try {
       if (onInvite) {
         await onInvite(email, role);
       } else {
-        await fetch(`/api/projects/${projectId}/invite`, {
+        const response = await fetch(`/api/projects/${projectId}/invite`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, role }),
         });
+
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          throw new Error(data.message || 'Failed to send invitation');
+        }
       }
+      toast.success(`Invitation sent to ${email}`);
       setEmail('');
       setRole('editor');
+      setEmailError(undefined);
     } catch (error) {
-      console.error('Failed to send invitation', error);
+      const message = error instanceof Error ? error.message : 'Failed to send invitation';
+      toast.error(message);
     } finally {
       setLoading(false);
     }
   };
+
+  const isValid = email.trim() && !emailError;
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={`Share "${projectName}"`}>
@@ -62,7 +102,9 @@ export function ShareDialog({
             type="email"
             placeholder="Enter email address"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={handleEmailChange}
+            onBlur={handleEmailBlur}
+            error={emailError}
           />
 
           <select
@@ -83,7 +125,7 @@ export function ShareDialog({
           <Button onClick={onClose} variant="outline">
             Cancel
           </Button>
-          <Button onClick={handleInvite} disabled={!email.trim() || loading} loading={loading}>
+          <Button onClick={handleInvite} disabled={!isValid || loading} loading={loading}>
             Send Invitation
           </Button>
         </div>
