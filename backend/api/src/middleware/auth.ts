@@ -92,7 +92,8 @@ class AuthMiddleware {
       next();
 
     } catch (error) {
-      if (error instanceof jwt.TokenExpiredError) {
+      const err = error as Error;
+      if (err.name === 'TokenExpiredError') {
         res.status(401).json({
           success: false,
           message: 'Token expired',
@@ -101,7 +102,7 @@ class AuthMiddleware {
         return;
       }
 
-      if (error instanceof jwt.JsonWebTokenError) {
+      if (err.name === 'JsonWebTokenError') {
         res.status(401).json({
           success: false,
           message: 'Invalid token',
@@ -372,7 +373,8 @@ class AuthMiddleware {
       });
 
     } catch (error) {
-      if (error instanceof jwt.TokenExpiredError) {
+      const err = error as Error;
+      if (err.name === 'TokenExpiredError') {
         res.status(401).json({
           success: false,
           message: 'Refresh token expired',

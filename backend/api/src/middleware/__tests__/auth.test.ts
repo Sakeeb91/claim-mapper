@@ -4,7 +4,7 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
+import jwt, { TokenExpiredError, JsonWebTokenError } from 'jsonwebtoken';
 
 interface AuthenticatedRequest extends Omit<Request, 'user'> {
   user?: {
@@ -20,7 +20,15 @@ interface AuthenticatedRequest extends Omit<Request, 'user'> {
 }
 
 // Mock dependencies before importing
-jest.mock('jsonwebtoken');
+jest.mock('jsonwebtoken', () => {
+  const actual = jest.requireActual('jsonwebtoken');
+  return {
+    ...actual,
+    verify: jest.fn(),
+    sign: jest.fn(),
+    decode: jest.fn(),
+  };
+});
 jest.mock('../../config/redis', () => ({
   __esModule: true,
   default: {
@@ -167,7 +175,7 @@ describe('Auth Middleware', () => {
     it('should reject expired token', async () => {
       mockReq.headers = { authorization: 'Bearer expired-token' };
       (jwt.verify as jest.Mock).mockImplementation(() => {
-        throw new jwt.TokenExpiredError('Token expired', new Date());
+        throw new TokenExpiredError('Token expired', new Date());
       });
 
       await authenticate(mockReq as Request, mockRes as Response, mockNext);
@@ -184,7 +192,7 @@ describe('Auth Middleware', () => {
     it('should reject invalid token', async () => {
       mockReq.headers = { authorization: 'Bearer invalid-token' };
       (jwt.verify as jest.Mock).mockImplementation(() => {
-        throw new jwt.JsonWebTokenError('Invalid token');
+        throw new JsonWebTokenError('Invalid token');
       });
 
       await authenticate(mockReq as Request, mockRes as Response, mockNext);
@@ -270,7 +278,7 @@ describe('Auth Middleware', () => {
     it('should continue silently on invalid token', async () => {
       mockReq.headers = { authorization: 'Bearer invalid-token' };
       (jwt.verify as jest.Mock).mockImplementation(() => {
-        throw new jwt.JsonWebTokenError('Invalid token');
+        throw new JsonWebTokenError('Invalid token');
       });
 
       await optionalAuth(mockReq as Request, mockRes as Response, mockNext);
@@ -715,7 +723,7 @@ describe('Auth Middleware', () => {
     it('should handle expired refresh token', async () => {
       mockReq.body = { refreshToken: 'expired-token' };
       (jwt.verify as jest.Mock).mockImplementation(() => {
-        throw new jwt.TokenExpiredError('Token expired', new Date());
+        throw new TokenExpiredError('Token expired', new Date());
       });
 
       await refreshToken(mockReq as Request, mockRes as Response);

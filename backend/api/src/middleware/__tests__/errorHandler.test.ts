@@ -5,7 +5,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import mongoose from 'mongoose';
-import jwt from 'jsonwebtoken';
+import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 
 // Mock dependencies
 jest.mock('../../config/redis', () => ({
@@ -165,7 +165,7 @@ describe('Error Handler Middleware', () => {
     });
 
     it('should handle JsonWebTokenError', () => {
-      const error = new jwt.JsonWebTokenError('Invalid token');
+      const error = new JsonWebTokenError('Invalid token');
 
       errorHandler(error as unknown as AppError, mockReq as Request, mockRes as Response, mockNext);
 
@@ -180,7 +180,7 @@ describe('Error Handler Middleware', () => {
     });
 
     it('should handle TokenExpiredError', () => {
-      const error = new jwt.TokenExpiredError('Token expired', new Date());
+      const error = new TokenExpiredError('Token expired', new Date());
 
       errorHandler(error as unknown as AppError, mockReq as Request, mockRes as Response, mockNext);
 
