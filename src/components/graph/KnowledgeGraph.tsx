@@ -1,11 +1,16 @@
 'use client';
 
-import { useEffect, useRef, useCallback, useMemo } from 'react';
+import { useEffect, useRef, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react';
 import * as d3 from 'd3';
 import { KnowledgeGraphProps, GraphNode, GraphLink } from '@/types';
 import { cn } from '@/utils';
 
-export function KnowledgeGraph({
+export interface KnowledgeGraphHandle {
+  getSvgElement: () => SVGSVGElement | null;
+  resetView: () => void;
+}
+
+export const KnowledgeGraph = forwardRef<KnowledgeGraphHandle, KnowledgeGraphProps>(function KnowledgeGraph({
   data,
   selectedNodeId,
   onNodeSelect,
@@ -15,7 +20,7 @@ export function KnowledgeGraph({
   width = 800,
   height = 600,
   className
-}: KnowledgeGraphProps) {
+}, ref) {
   const svgRef = useRef<SVGSVGElement>(null);
   const simulationRef = useRef<d3.Simulation<GraphNode, GraphLink> | null>(null);
 
@@ -292,10 +297,11 @@ export function KnowledgeGraph({
     );
   }, []);
 
-  // Expose reset method via ref
-  useEffect(() => {
-    (svgRef.current as any)?.resetView && ((svgRef.current as any).resetView = resetView);
-  }, [resetView]);
+  // Expose methods via ref for parent components
+  useImperativeHandle(ref, () => ({
+    getSvgElement: () => svgRef.current,
+    resetView
+  }), [resetView]);
 
   return (
     <div className={cn("relative overflow-hidden bg-gray-50", className)}>
@@ -320,4 +326,4 @@ export function KnowledgeGraph({
       )}
     </div>
   );
-}
+});

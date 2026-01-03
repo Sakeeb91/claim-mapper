@@ -2,13 +2,16 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useAppStore } from '@/store/useAppStore';
-import { KnowledgeGraph } from '@/components/graph/KnowledgeGraph';
+import { KnowledgeGraph, KnowledgeGraphHandle } from '@/components/graph/KnowledgeGraph';
 import { GraphControls } from '@/components/graph/GraphControls';
 import { NodeDetailsPanel } from '@/components/graph/NodeDetailsPanel';
+import { ExportButton } from '@/components/graph/ExportButton';
 import { ReasoningChainVisualizer } from '@/components/reasoning/ReasoningChainVisualizer';
 import { toast } from 'react-hot-toast';
 import { Loader2, Eye, EyeOff, Maximize2, Minimize2 } from 'lucide-react';
 import { cn } from '@/utils';
+import { useGraphExport } from '@/hooks';
+import type { ExportFormat } from '@/types';
 
 export default function ExplorePage() {
   const {
@@ -32,6 +35,24 @@ export default function ExplorePage() {
   const [showReasoningVisualizer, setShowReasoningVisualizer] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const graphContainerRef = useRef<HTMLDivElement>(null);
+  const graphRef = useRef<KnowledgeGraphHandle>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+
+  // Update SVG ref when graph ref changes
+  useEffect(() => {
+    if (graphRef.current) {
+      const svg = graphRef.current.getSvgElement();
+      if (svg) {
+        (svgRef as React.MutableRefObject<SVGSVGElement | null>).current = svg;
+      }
+    }
+  });
+
+  // Graph export hook
+  const { exportGraph, isExporting } = useGraphExport(svgRef, graphData, {
+    projectId: 'explore',
+    projectName: 'Knowledge Graph Explorer'
+  });
 
   // Load graph data on component mount
   useEffect(() => {
@@ -83,9 +104,8 @@ export default function ExplorePage() {
     toast.success('Graph view reset');
   };
 
-  const handleExport = () => {
-    // TODO: Implement graph export functionality
-    toast.success('Export functionality coming soon!');
+  const handleExport = async (format: ExportFormat) => {
+    await exportGraph(format);
   };
 
   // Handle node connection
@@ -160,6 +180,12 @@ export default function ExplorePage() {
               {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
               <span>{isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}</span>
             </button>
+
+            <ExportButton
+              onExport={handleExport}
+              isExporting={isExporting}
+              disabled={graphData.nodes.length === 0}
+            />
           </div>
         </div>
       </div>
@@ -188,7 +214,6 @@ export default function ExplorePage() {
               searchQuery={graphSearchQuery}
               onSearchChange={handleSearchChange}
               onResetView={handleResetView}
-              onExport={handleExport}
             />
           </div>
         </div>
@@ -204,6 +229,7 @@ export default function ExplorePage() {
             </div>
           ) : (
             <KnowledgeGraph
+              ref={graphRef}
               data={graphData}
               selectedNodeId={selectedNode || undefined}
               onNodeSelect={handleNodeSelect}
