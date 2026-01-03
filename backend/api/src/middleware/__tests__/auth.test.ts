@@ -95,6 +95,12 @@ describe('Auth Middleware', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Reset Redis mocks to default values
+    (redisManager.exists as jest.Mock).mockResolvedValue(false);
+    (redisManager.get as jest.Mock).mockResolvedValue(null);
+    (redisManager.set as jest.Mock).mockResolvedValue(undefined);
+    (redisManager.del as jest.Mock).mockResolvedValue(undefined);
+    (redisManager.trackUserActivity as jest.Mock).mockResolvedValue(undefined);
 
     mockReq = {
       headers: {},
@@ -115,6 +121,11 @@ describe('Auth Middleware', () => {
 
     mockNext = jest.fn();
 
+    // Reset jwt mocks to default values
+    (jwt.verify as jest.Mock).mockReset();
+    (jwt.sign as jest.Mock).mockReset();
+    (jwt.decode as jest.Mock).mockReset();
+
     // Default mocks
     (jwt.verify as jest.Mock).mockReturnValue({
       userId: 'user-123',
@@ -122,8 +133,13 @@ describe('Auth Middleware', () => {
       role: 'user',
     });
 
-    (User.findById as jest.Mock).mockReturnValue({
-      select: jest.fn().mockResolvedValue(mockUser),
+    // User.findById mock - some tests use .select(), some don't
+    (User.findById as jest.Mock).mockImplementation(() => {
+      const chainedMock = {
+        select: jest.fn().mockResolvedValue(mockUser),
+      };
+      // Also allow direct await for optionalAuth which doesn't use .select()
+      return Object.assign(Promise.resolve(mockUser), chainedMock);
     });
   });
 
