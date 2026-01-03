@@ -125,6 +125,11 @@ export function reasoningChainToGraph(
     createEvidenceToPremiseLinks(chain, links, opts.evidenceMap);
   }
 
+  // Create conclusion-to-claim link if enabled
+  if (opts.includeConclusionToClaimLink) {
+    createConclusionToClaimLink(chain, claimId, links);
+  }
+
   return {
     nodes,
     links,
@@ -308,5 +313,69 @@ function createEvidenceToPremiseLinks(
         });
       });
     }
+  });
+}
+
+/**
+ * Creates a link from conclusion step(s) to the original claim.
+ * This connects the reasoning chain back to the claim it's reasoning about.
+ *
+ * @param chain - The reasoning chain
+ * @param claimId - ID of the claim this chain belongs to
+ * @param links - Array to add links to (mutated)
+ */
+function createConclusionToClaimLink(
+  chain: ReasoningChain,
+  claimId: string,
+  links: GraphLink[]
+): void {
+  // Find all conclusion steps
+  const conclusionSteps = chain.steps.filter((step) => step.type === 'conclusion');
+
+  if (conclusionSteps.length === 0) {
+    // If no explicit conclusions, link the last step to the claim
+    const sortedSteps = [...chain.steps].sort((a, b) => a.order - b.order);
+    if (sortedSteps.length > 0) {
+      const lastStep = sortedSteps[sortedSteps.length - 1];
+      const sourceId = `step-${chain.id}-${lastStep.order}`;
+      const linkId = `conclusion-${chain.id}-${lastStep.order}-${claimId}`;
+
+      links.push({
+        id: linkId,
+        source: sourceId,
+        target: claimId,
+        type: 'reasoning',
+        strength: lastStep.confidence || 0.7,
+        label: 'concludes',
+        curved: false,
+        data: {
+          relationship: 'concludes',
+          isLogicalFlow: true,
+          chainId: chain.id,
+        },
+      });
+    }
+    return;
+  }
+
+  // Create links from each conclusion to the claim
+  conclusionSteps.forEach((step) => {
+    const sourceId = `step-${chain.id}-${step.order}`;
+    const linkId = `conclusion-${chain.id}-${step.order}-${claimId}`;
+
+    links.push({
+      id: linkId,
+      source: sourceId,
+      target: claimId,
+      type: 'reasoning',
+      strength: step.confidence || 0.8,
+      label: 'concludes',
+      curved: false,
+      data: {
+        relationship: 'concludes',
+        isLogicalFlow: true,
+        chainId: chain.id,
+      },
+    });
   });
 }
