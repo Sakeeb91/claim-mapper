@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, ReactElement, cloneElement } from 'react';
+import { useState, useCallback, useId, ReactElement, cloneElement } from 'react';
 import { cn } from '@/utils';
 
 export type TooltipSide = 'top' | 'bottom' | 'left' | 'right';
@@ -13,6 +13,8 @@ export interface TooltipProps {
   align?: TooltipAlign;
   sideOffset?: number;
   className?: string;
+  /** Optional delay before showing tooltip (ms) */
+  delayDuration?: number;
 }
 
 const sideStyles: Record<TooltipSide, string> = {
@@ -52,10 +54,19 @@ export function Tooltip({
   align = 'center',
   sideOffset,
   className,
+  delayDuration = 0,
 }: TooltipProps) {
   const [isVisible, setIsVisible] = useState(false);
+  const tooltipId = useId();
 
-  const showTooltip = useCallback(() => setIsVisible(true), []);
+  const showTooltip = useCallback(() => {
+    if (delayDuration > 0) {
+      const timer = setTimeout(() => setIsVisible(true), delayDuration);
+      return () => clearTimeout(timer);
+    }
+    setIsVisible(true);
+  }, [delayDuration]);
+
   const hideTooltip = useCallback(() => setIsVisible(false), []);
 
   const offsetStyle = sideOffset
@@ -74,9 +85,13 @@ export function Tooltip({
         onMouseLeave: hideTooltip,
         onFocus: showTooltip,
         onBlur: hideTooltip,
+        'aria-describedby': isVisible ? tooltipId : undefined,
       })}
       {isVisible && (
         <div
+          id={tooltipId}
+          role="tooltip"
+          aria-hidden={!isVisible}
           className={cn(
             'absolute z-50 px-3 py-2 text-sm bg-popover text-popover-foreground rounded-md shadow-md border border-border whitespace-nowrap',
             sideStyles[side],
