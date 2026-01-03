@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useId, FormEvent } from 'react';
 import { Share2, Copy, Check, Link } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { Modal, Button, Input } from '@/components/ui';
@@ -28,6 +28,11 @@ export function ShareDialog({
   const [loading, setLoading] = useState(false);
   const [emailError, setEmailError] = useState<string | undefined>();
   const [copied, setCopied] = useState(false);
+
+  // Unique IDs for accessibility
+  const emailId = useId();
+  const roleId = useId();
+  const linkId = useId();
 
   // Generate shareable link
   const shareUrl = typeof window !== 'undefined'
@@ -106,17 +111,29 @@ export function ShareDialog({
 
   const isValid = email.trim() && !emailError;
 
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    if (isValid && !loading) {
+      handleInvite();
+    }
+  };
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={`Share "${projectName}"`}>
       <div className="space-y-4">
         {/* Copy Link Section */}
-        <div className="space-y-2">
+        <div className="space-y-2" role="group" aria-labelledby={linkId}>
           <div className="flex items-center space-x-2 text-muted-foreground">
-            <Link className="h-4 w-4" />
-            <span className="text-sm font-medium">Share link</span>
+            <Link className="h-4 w-4" aria-hidden="true" />
+            <span id={linkId} className="text-sm font-medium">Share link</span>
           </div>
           <div className="flex items-center space-x-2">
-            <div className="flex-1 rounded-md border border-input bg-muted px-3 py-2">
+            <div
+              className="flex-1 rounded-md border border-input bg-muted px-3 py-2"
+              role="textbox"
+              aria-readonly="true"
+              aria-label="Shareable project link"
+            >
               <span className="text-sm text-muted-foreground truncate block">
                 {shareUrl}
               </span>
@@ -126,56 +143,79 @@ export function ShareDialog({
               variant="outline"
               size="icon"
               className="shrink-0"
+              aria-label={copied ? 'Link copied' : 'Copy link to clipboard'}
             >
               {copied ? (
-                <Check className="h-4 w-4 text-green-500" />
+                <Check className="h-4 w-4 text-green-500" aria-hidden="true" />
               ) : (
-                <Copy className="h-4 w-4" />
+                <Copy className="h-4 w-4" aria-hidden="true" />
               )}
             </Button>
           </div>
         </div>
 
-        <div className="border-t border-border my-4" />
+        <div className="border-t border-border my-4" role="separator" />
 
         {/* Invite Section */}
-        <div className="flex items-center space-x-2 text-muted-foreground">
-          <Share2 className="h-4 w-4" />
-          <span className="text-sm font-medium">Invite by email</span>
-        </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="flex items-center space-x-2 text-muted-foreground">
+            <Share2 className="h-4 w-4" aria-hidden="true" />
+            <span className="text-sm font-medium">Invite by email</span>
+          </div>
 
-        <div className="space-y-3">
-          <Input
-            type="email"
-            placeholder="Enter email address"
-            value={email}
-            onChange={handleEmailChange}
-            onBlur={handleEmailBlur}
-            error={emailError}
-          />
+          <div className="space-y-3">
+            <div>
+              <label htmlFor={emailId} className="sr-only">
+                Email address
+              </label>
+              <Input
+                id={emailId}
+                type="email"
+                placeholder="Enter email address"
+                value={email}
+                onChange={handleEmailChange}
+                onBlur={handleEmailBlur}
+                error={emailError}
+                aria-invalid={!!emailError}
+                aria-describedby={emailError ? `${emailId}-error` : undefined}
+              />
+            </div>
 
-          <select
-            value={role}
-            onChange={(e) => setRole(e.target.value as ShareRole)}
-            className={cn(
-              'w-full rounded-md border border-input bg-background px-3 py-2 text-sm',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
-            )}
-          >
-            <option value="viewer">Viewer - Can view only</option>
-            <option value="editor">Editor - Can edit content</option>
-            <option value="admin">Admin - Full access</option>
-          </select>
-        </div>
+            <div>
+              <label htmlFor={roleId} className="sr-only">
+                Permission level
+              </label>
+              <select
+                id={roleId}
+                value={role}
+                onChange={(e) => setRole(e.target.value as ShareRole)}
+                aria-label="Select permission level"
+                className={cn(
+                  'w-full rounded-md border border-input bg-background px-3 py-2 text-sm',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+                )}
+              >
+                <option value="viewer">Viewer - Can view only</option>
+                <option value="editor">Editor - Can edit content</option>
+                <option value="admin">Admin - Full access</option>
+              </select>
+            </div>
+          </div>
 
-        <div className="flex justify-end space-x-2 pt-4">
-          <Button onClick={onClose} variant="outline">
-            Cancel
-          </Button>
-          <Button onClick={handleInvite} disabled={!isValid || loading} loading={loading}>
-            Send Invitation
-          </Button>
-        </div>
+          <div className="flex justify-end space-x-2 pt-4">
+            <Button type="button" onClick={onClose} variant="outline">
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={!isValid || loading}
+              loading={loading}
+              aria-busy={loading}
+            >
+              Send Invitation
+            </Button>
+          </div>
+        </form>
       </div>
     </Modal>
   );
