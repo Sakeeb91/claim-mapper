@@ -1,6 +1,6 @@
 'use client';
 
-import { Users, Eye, Edit3, Clock } from 'lucide-react';
+import { Users, Eye, Edit3, Clock, AlertCircle } from 'lucide-react';
 import { cn, formatRelativeTime } from '@/utils';
 import { Tooltip } from '@/components/ui';
 
@@ -41,6 +41,98 @@ const activityConfig = {
     bgColor: 'bg-gray-400',
   },
 };
+
+/**
+ * Compact stacked avatars for use in headers/toolbars
+ */
+interface StackedAvatarsProps {
+  users: ActiveUser[];
+  maxVisible?: number;
+  size?: 'sm' | 'md';
+}
+
+export function StackedAvatars({ users, maxVisible = 4, size = 'md' }: StackedAvatarsProps) {
+  const visibleUsers = users.slice(0, maxVisible);
+  const hiddenCount = Math.max(0, users.length - maxVisible);
+
+  const sizeClasses = {
+    sm: 'h-6 w-6 text-xs',
+    md: 'h-8 w-8 text-sm',
+  };
+
+  return (
+    <div className="flex items-center">
+      <div className="flex -space-x-2">
+        {visibleUsers.map((user, index) => (
+          <Tooltip key={user.id} content={user.name} side="bottom">
+            <div
+              className={cn(
+                'rounded-full flex items-center justify-center text-white font-medium border-2 border-background',
+                sizeClasses[size]
+              )}
+              style={{ backgroundColor: user.color, zIndex: maxVisible - index }}
+            >
+              {user.avatarUrl ? (
+                <img
+                  src={user.avatarUrl}
+                  alt={user.name}
+                  className={cn('rounded-full', sizeClasses[size])}
+                />
+              ) : (
+                user.name.charAt(0).toUpperCase()
+              )}
+            </div>
+          </Tooltip>
+        ))}
+        {hiddenCount > 0 && (
+          <div
+            className={cn(
+              'rounded-full flex items-center justify-center bg-muted text-muted-foreground font-medium border-2 border-background',
+              sizeClasses[size]
+            )}
+            style={{ zIndex: 0 }}
+          >
+            +{hiddenCount}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Alert banner when others are editing the same content
+ */
+interface EditingAlertProps {
+  editingUsers: ActiveUser[];
+  className?: string;
+}
+
+export function EditingAlert({ editingUsers, className }: EditingAlertProps) {
+  if (editingUsers.length === 0) return null;
+
+  const names = editingUsers.map((u) => u.name);
+  const displayText =
+    names.length === 1
+      ? `${names[0]} is currently editing`
+      : names.length === 2
+        ? `${names[0]} and ${names[1]} are currently editing`
+        : `${names[0]} and ${names.length - 1} others are currently editing`;
+
+  return (
+    <div
+      className={cn(
+        'flex items-center space-x-2 px-3 py-2 rounded-md bg-amber-50 border border-amber-200 text-amber-800',
+        className
+      )}
+      role="alert"
+    >
+      <AlertCircle className="h-4 w-4 shrink-0" />
+      <span className="text-sm">{displayText}</span>
+      <StackedAvatars users={editingUsers} size="sm" maxVisible={3} />
+    </div>
+  );
+}
 
 export function CollaborationPanel({
   projectId,
