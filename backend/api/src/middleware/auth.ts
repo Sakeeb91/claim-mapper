@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
+import jwt, { SignOptions } from 'jsonwebtoken';
 import User, { IUser } from '../models/User';
 import Project from '../models/Project';
 import redisManager from '../config/redis';
@@ -27,13 +27,13 @@ export interface JWTPayload {
 
 class AuthMiddleware {
   private jwtSecret: string;
-  private jwtExpiry: string;
-  private refreshTokenExpiry: string;
+  private jwtExpiry: SignOptions['expiresIn'];
+  private refreshTokenExpiry: SignOptions['expiresIn'];
 
   constructor() {
     this.jwtSecret = process.env.JWT_SECRET || 'claim-mapper-secret-key';
-    this.jwtExpiry = process.env.JWT_EXPIRY || '24h';
-    this.refreshTokenExpiry = process.env.REFRESH_TOKEN_EXPIRY || '7d';
+    this.jwtExpiry = (process.env.JWT_EXPIRY || '24h') as SignOptions['expiresIn'];
+    this.refreshTokenExpiry = (process.env.REFRESH_TOKEN_EXPIRY || '7d') as SignOptions['expiresIn'];
   }
 
   // Main authentication middleware
