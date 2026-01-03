@@ -494,7 +494,7 @@ describe('User Model', () => {
       });
 
       const validationError = user.validateSync();
-      expect(validationError).toBeNull();
+      expect(validationError).toBeUndefined();
     });
   });
 
