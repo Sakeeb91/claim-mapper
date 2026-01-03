@@ -6,6 +6,15 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
+interface AuthenticatedRequest extends Request {
+  user?: {
+    id: string;
+    email: string;
+    role: string;
+    name?: string;
+  };
+}
+
 // Mock dependencies before importing
 jest.mock('jsonwebtoken');
 jest.mock('../../config/redis', () => ({
@@ -223,7 +232,7 @@ describe('Auth Middleware', () => {
 
       await authenticate(mockReq as Request, mockRes as Response, mockNext);
 
-      expect((mockReq as any).user).toBeDefined();
+      expect((mockReq as AuthenticatedRequest).user).toBeDefined();
       expect(mockNext).toHaveBeenCalled();
     });
 
@@ -241,7 +250,7 @@ describe('Auth Middleware', () => {
       await optionalAuth(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockNext).toHaveBeenCalled();
-      expect((mockReq as any).user).toBeUndefined();
+      expect((mockReq as AuthenticatedRequest).user).toBeUndefined();
     });
 
     it('should attach user if valid token provided', async () => {
@@ -250,7 +259,7 @@ describe('Auth Middleware', () => {
       await optionalAuth(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockNext).toHaveBeenCalled();
-      expect((mockReq as any).user).toBeDefined();
+      expect((mockReq as AuthenticatedRequest).user).toBeDefined();
     });
 
     it('should continue silently on invalid token', async () => {
@@ -262,7 +271,7 @@ describe('Auth Middleware', () => {
       await optionalAuth(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockNext).toHaveBeenCalled();
-      expect((mockReq as any).user).toBeUndefined();
+      expect((mockReq as AuthenticatedRequest).user).toBeUndefined();
     });
   });
 
@@ -282,7 +291,7 @@ describe('Auth Middleware', () => {
     });
 
     it('should allow access for user with required role', () => {
-      (mockReq as any).user = { ...mockUser, role: 'admin' };
+      (mockReq as AuthenticatedRequest).user ={ ...mockUser, role: 'admin' };
       const middleware = requireRole('admin');
 
       middleware(mockReq as Request, mockRes as Response, mockNext);
@@ -291,7 +300,7 @@ describe('Auth Middleware', () => {
     });
 
     it('should reject user without required role', () => {
-      (mockReq as any).user = { ...mockUser, role: 'user' };
+      (mockReq as AuthenticatedRequest).user ={ ...mockUser, role: 'user' };
       const middleware = requireRole('admin');
 
       middleware(mockReq as Request, mockRes as Response, mockNext);
@@ -306,7 +315,7 @@ describe('Auth Middleware', () => {
     });
 
     it('should accept array of roles', () => {
-      (mockReq as any).user = { ...mockUser, role: 'researcher' };
+      (mockReq as AuthenticatedRequest).user ={ ...mockUser, role: 'researcher' };
       const middleware = requireRole(['admin', 'researcher']);
 
       middleware(mockReq as Request, mockRes as Response, mockNext);
@@ -315,7 +324,7 @@ describe('Auth Middleware', () => {
     });
 
     it('should reject if user role not in allowed array', () => {
-      (mockReq as any).user = { ...mockUser, role: 'user' };
+      (mockReq as AuthenticatedRequest).user ={ ...mockUser, role: 'user' };
       const middleware = requireRole(['admin', 'researcher']);
 
       middleware(mockReq as Request, mockRes as Response, mockNext);
@@ -357,7 +366,7 @@ describe('Auth Middleware', () => {
     });
 
     it('should reject if project ID not provided', async () => {
-      (mockReq as any).user = mockUser;
+      (mockReq as AuthenticatedRequest).user =mockUser;
       const middleware = requireProjectAccess();
 
       await middleware(mockReq as Request, mockRes as Response, mockNext);
@@ -372,7 +381,7 @@ describe('Auth Middleware', () => {
     });
 
     it('should reject if project not found', async () => {
-      (mockReq as any).user = mockUser;
+      (mockReq as AuthenticatedRequest).user =mockUser;
       mockReq.params = { projectId: 'project-123' };
       (Project.findById as jest.Mock).mockReturnValue({
         populate: jest.fn().mockReturnValue({
@@ -394,7 +403,7 @@ describe('Auth Middleware', () => {
     });
 
     it('should allow access for project owner', async () => {
-      (mockReq as any).user = mockUser;
+      (mockReq as AuthenticatedRequest).user =mockUser;
       mockReq.params = { projectId: 'project-123' };
 
       const middleware = requireProjectAccess();
@@ -406,7 +415,7 @@ describe('Auth Middleware', () => {
     });
 
     it('should allow access for collaborator', async () => {
-      (mockReq as any).user = { ...mockUser, _id: { toString: () => 'collaborator-123' } };
+      (mockReq as AuthenticatedRequest).user ={ ...mockUser, _id: { toString: () => 'collaborator-123' } };
       mockReq.params = { projectId: 'project-123' };
 
       const projectWithCollaborator = {
@@ -429,7 +438,7 @@ describe('Auth Middleware', () => {
     });
 
     it('should allow access to public project for any user', async () => {
-      (mockReq as any).user = { ...mockUser, _id: { toString: () => 'random-user' } };
+      (mockReq as AuthenticatedRequest).user ={ ...mockUser, _id: { toString: () => 'random-user' } };
       mockReq.params = { projectId: 'project-123' };
 
       const publicProject = {
@@ -452,7 +461,7 @@ describe('Auth Middleware', () => {
     });
 
     it('should deny access to private project for non-member', async () => {
-      (mockReq as any).user = { ...mockUser, _id: { toString: () => 'random-user' } };
+      (mockReq as AuthenticatedRequest).user ={ ...mockUser, _id: { toString: () => 'random-user' } };
       mockReq.params = { projectId: 'project-123' };
 
       const privateProject = {
@@ -482,7 +491,7 @@ describe('Auth Middleware', () => {
     });
 
     it('should check specific permission if required', async () => {
-      (mockReq as any).user = { ...mockUser, _id: { toString: () => 'collaborator-123' } };
+      (mockReq as AuthenticatedRequest).user ={ ...mockUser, _id: { toString: () => 'collaborator-123' } };
       mockReq.params = { projectId: 'project-123' };
 
       const projectWithLimitedPermission = {
@@ -512,7 +521,7 @@ describe('Auth Middleware', () => {
     });
 
     it('should get projectId from body if not in params', async () => {
-      (mockReq as any).user = mockUser;
+      (mockReq as AuthenticatedRequest).user =mockUser;
       mockReq.body = { projectId: 'project-123' };
 
       const middleware = requireProjectAccess();
@@ -523,7 +532,7 @@ describe('Auth Middleware', () => {
     });
 
     it('should get projectId from query if not in params or body', async () => {
-      (mockReq as any).user = mockUser;
+      (mockReq as AuthenticatedRequest).user =mockUser;
       mockReq.query = { projectId: 'project-123' };
 
       const middleware = requireProjectAccess();

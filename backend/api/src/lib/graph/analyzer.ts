@@ -11,11 +11,25 @@ export interface GraphMetrics {
   clusters: number;
 }
 
+interface GraphNode {
+  id: string;
+  type: string;
+  label?: string;
+  [key: string]: unknown;
+}
+
+interface GraphLink {
+  source: string | { id: string };
+  target: string | { id: string };
+  type?: string;
+  [key: string]: unknown;
+}
+
 export class GraphAnalyzer {
   /**
    * Calculate basic graph metrics
    */
-  calculateMetrics(nodes: any[], links: any[]): GraphMetrics {
+  calculateMetrics(nodes: GraphNode[], links: GraphLink[]): GraphMetrics {
     const nodeCount = nodes.length;
     const linkCount = links.length;
     const maxPossibleLinks = (nodeCount * (nodeCount - 1)) / 2;
@@ -34,7 +48,7 @@ export class GraphAnalyzer {
   /**
    * Find central nodes
    */
-  findCentralNodes(nodes: any[], links: any[], limit: number = 10): any[] {
+  findCentralNodes(nodes: GraphNode[], links: GraphLink[], limit: number = 10): GraphNode[] {
     const degreeMap = new Map<string, number>();
 
     // Calculate degree for each node
