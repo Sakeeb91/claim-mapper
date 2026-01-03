@@ -4,6 +4,7 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
+import Joi from 'joi';
 
 // Mock dependencies
 jest.mock('../../config/redis', () => ({
@@ -247,7 +248,11 @@ describe('Validation Middleware', () => {
     });
 
     describe('with objectId schema for params', () => {
-      const middleware = validate(validationSchemas.objectId, 'params');
+      // Create a proper object schema for params that has an 'id' field
+      const objectIdParamsSchema = Joi.object({
+        id: validationSchemas.objectId.required(),
+      });
+      const middleware = validate(objectIdParamsSchema, 'params');
 
       it('should pass valid ObjectId', () => {
         mockReq.params = { id: '507f1f77bcf86cd799439011' };
