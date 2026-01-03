@@ -3,17 +3,69 @@
 import { useState, useCallback, ReactElement, cloneElement } from 'react';
 import { cn } from '@/utils';
 
+export type TooltipSide = 'top' | 'bottom' | 'left' | 'right';
+export type TooltipAlign = 'start' | 'center' | 'end';
+
 export interface TooltipProps {
   content: React.ReactNode;
   children: ReactElement;
+  side?: TooltipSide;
+  align?: TooltipAlign;
+  sideOffset?: number;
   className?: string;
 }
 
-export function Tooltip({ content, children, className }: TooltipProps) {
+const sideStyles: Record<TooltipSide, string> = {
+  top: 'bottom-full mb-2',
+  bottom: 'top-full mt-2',
+  left: 'right-full mr-2',
+  right: 'left-full ml-2',
+};
+
+const alignStyles: Record<TooltipSide, Record<TooltipAlign, string>> = {
+  top: {
+    start: 'left-0',
+    center: 'left-1/2 -translate-x-1/2',
+    end: 'right-0',
+  },
+  bottom: {
+    start: 'left-0',
+    center: 'left-1/2 -translate-x-1/2',
+    end: 'right-0',
+  },
+  left: {
+    start: 'top-0',
+    center: 'top-1/2 -translate-y-1/2',
+    end: 'bottom-0',
+  },
+  right: {
+    start: 'top-0',
+    center: 'top-1/2 -translate-y-1/2',
+    end: 'bottom-0',
+  },
+};
+
+export function Tooltip({
+  content,
+  children,
+  side = 'top',
+  align = 'center',
+  sideOffset,
+  className,
+}: TooltipProps) {
   const [isVisible, setIsVisible] = useState(false);
 
   const showTooltip = useCallback(() => setIsVisible(true), []);
   const hideTooltip = useCallback(() => setIsVisible(false), []);
+
+  const offsetStyle = sideOffset
+    ? {
+        ...(side === 'top' && { marginBottom: sideOffset }),
+        ...(side === 'bottom' && { marginTop: sideOffset }),
+        ...(side === 'left' && { marginRight: sideOffset }),
+        ...(side === 'right' && { marginLeft: sideOffset }),
+      }
+    : undefined;
 
   return (
     <div className="relative inline-block">
@@ -27,8 +79,11 @@ export function Tooltip({ content, children, className }: TooltipProps) {
         <div
           className={cn(
             'absolute z-50 px-3 py-2 text-sm bg-popover text-popover-foreground rounded-md shadow-md border border-border whitespace-nowrap',
+            sideStyles[side],
+            alignStyles[side][align],
             className
           )}
+          style={offsetStyle}
         >
           {content}
         </div>
