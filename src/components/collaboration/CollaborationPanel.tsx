@@ -135,7 +135,7 @@ export function EditingAlert({ editingUsers, className }: EditingAlertProps) {
 }
 
 export function CollaborationPanel({
-  projectId,
+  projectId: _projectId,
   activeUsers,
   currentUserId,
   className,

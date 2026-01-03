@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Shield, Users, ChevronDown, Trash2, AlertCircle } from 'lucide-react';
+import { Shield, Users, ChevronDown, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui';
 import { toast } from 'react-hot-toast';
 import { cn } from '@/utils';
@@ -33,14 +33,13 @@ const roleLabels: Record<Permission, string> = {
   admin: 'Admin',
 };
 
-const roleDescriptions: Record<Permission, string> = {
-  viewer: 'Can view content only',
-  editor: 'Can edit content',
-  admin: 'Full access to project',
-};
+// Role descriptions for tooltips (available for future use)
+// viewer: 'Can view content only'
+// editor: 'Can edit content'
+// admin: 'Full access to project'
 
 export function PermissionsManager({
-  projectId,
+  projectId: _projectId,
   collaborators,
   currentUserId,
   currentUserRole,
