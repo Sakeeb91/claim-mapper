@@ -9,6 +9,10 @@ Practical how-to guides for common tasks:
 - **[Testing Guide](./guides/testing.md)** - Comprehensive testing strategy and commands
 - **[Search Implementation](./guides/search.md)** - Search system architecture and usage
 
+### Features
+In-depth feature documentation:
+- **[Reasoning Flow Visualization](./features/reasoning-flow-visualization.md)** - Reasoning chain graph visualization
+
 ### Architecture
 Deep dives into system design and components:
 - **[ML Service Overview](./architecture/ml-service.md)** - ML service capabilities and API
