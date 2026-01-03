@@ -424,3 +424,35 @@ export interface EvidenceDrawerProps {
   evidence: LinkedEvidence[];
   isLoading?: boolean;
 }
+
+// Graph export types
+export type ExportFormat = 'png' | 'svg' | 'json' | 'graphml';
+
+export interface ExportMetadata {
+  exportDate: string;
+  version: string;
+  projectId?: string;
+  projectName?: string;
+  nodeCount: number;
+  linkCount: number;
+  exportedBy?: string;
+}
+
+export interface ExportOptions {
+  filename?: string;
+  includeMetadata?: boolean;
+  quality?: number;
+  backgroundColor?: string;
+}
+
+export interface GraphExportData {
+  metadata: ExportMetadata;
+  graph: GraphData;
+}
+
+export interface ExportResult {
+  success: boolean;
+  filename: string;
+  format: ExportFormat;
+  error?: string;
+}
