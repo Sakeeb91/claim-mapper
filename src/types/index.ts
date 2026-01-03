@@ -42,6 +42,9 @@ export interface ReasoningStep {
 }
 
 // Graph visualization types
+// Subtype for reasoning nodes (premise → inference → conclusion flow)
+export type ReasoningNodeSubtype = 'premise' | 'inference' | 'conclusion' | 'assumption' | 'observation';
+
 export interface GraphNode {
   id: string;
   type: 'claim' | 'evidence' | 'reasoning';
@@ -57,7 +60,15 @@ export interface GraphNode {
   group?: string;
   confidence?: number;
   data: Claim | Evidence | ReasoningChain;
+  // Reasoning-specific properties
+  subtype?: ReasoningNodeSubtype;
+  level?: number; // Hierarchical level: 0=premise, 1=inference, 2=conclusion
+  stepNumber?: number;
+  chainId?: string;
 }
+
+// Extended link types for reasoning flow visualization
+export type ReasoningLinkRelationship = 'supports' | 'requires' | 'contradicts' | 'evidence-to-premise' | 'concludes';
 
 export interface GraphLink {
   id: string;
@@ -67,11 +78,29 @@ export interface GraphLink {
   strength: number;
   label?: string;
   curved?: boolean;
+  // Reasoning-specific properties
+  data?: {
+    relationship?: ReasoningLinkRelationship;
+    isLogicalFlow?: boolean; // True for reasoning chain dependency links
+    chainId?: string;
+  };
 }
 
 export interface GraphData {
   nodes: GraphNode[];
   links: GraphLink[];
+}
+
+// Reasoning chain graph data with layout preference
+export type ReasoningLayoutType = 'hierarchical' | 'force';
+
+export interface ReasoningGraphData {
+  nodes: GraphNode[];
+  links: GraphLink[];
+  chainId: string;
+  chainType: 'deductive' | 'inductive' | 'abductive' | 'analogical' | 'causal' | 'statistical';
+  layout: ReasoningLayoutType;
+  stepCount: number;
 }
 
 export interface GraphLayout {
