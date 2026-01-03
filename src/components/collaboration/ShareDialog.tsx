@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Share2 } from 'lucide-react';
+import { Share2, Copy, Check, Link } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { Modal, Button, Input } from '@/components/ui';
 import { cn, isValidEmail } from '@/utils';
@@ -27,6 +27,23 @@ export function ShareDialog({
   const [role, setRole] = useState<ShareRole>('editor');
   const [loading, setLoading] = useState(false);
   const [emailError, setEmailError] = useState<string | undefined>();
+  const [copied, setCopied] = useState(false);
+
+  // Generate shareable link
+  const shareUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}/projects/${projectId}`
+    : `/projects/${projectId}`;
+
+  const handleCopyLink = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      toast.success('Link copied to clipboard');
+      setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      toast.error('Failed to copy link');
+    }
+  }, [shareUrl]);
 
   const validateEmail = useCallback((value: string): boolean => {
     if (!value.trim()) {
@@ -92,9 +109,39 @@ export function ShareDialog({
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={`Share "${projectName}"`}>
       <div className="space-y-4">
+        {/* Copy Link Section */}
+        <div className="space-y-2">
+          <div className="flex items-center space-x-2 text-muted-foreground">
+            <Link className="h-4 w-4" />
+            <span className="text-sm font-medium">Share link</span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <div className="flex-1 rounded-md border border-input bg-muted px-3 py-2">
+              <span className="text-sm text-muted-foreground truncate block">
+                {shareUrl}
+              </span>
+            </div>
+            <Button
+              onClick={handleCopyLink}
+              variant="outline"
+              size="icon"
+              className="shrink-0"
+            >
+              {copied ? (
+                <Check className="h-4 w-4 text-green-500" />
+              ) : (
+                <Copy className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
+        </div>
+
+        <div className="border-t border-border my-4" />
+
+        {/* Invite Section */}
         <div className="flex items-center space-x-2 text-muted-foreground">
           <Share2 className="h-4 w-4" />
-          <span className="text-sm">Invite collaborators to this project</span>
+          <span className="text-sm font-medium">Invite by email</span>
         </div>
 
         <div className="space-y-3">
