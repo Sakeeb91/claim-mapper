@@ -13,6 +13,7 @@ module.exports = {
   testMatch: [
     '<rootDir>/src/**/__tests__/**/*.{js,ts}',
     '<rootDir>/src/**/*.(test|spec).{js,ts}',
+    '<rootDir>/tests/**/*.{js,ts}',
   ],
 
   // Module resolution
@@ -32,13 +33,26 @@ module.exports = {
     '!src/server.ts',
   ],
 
-  // Coverage thresholds - lowered for now
+  // Coverage thresholds - targeting 60% for critical paths
   coverageThreshold: {
     global: {
-      branches: 0,
-      functions: 0,
-      lines: 0,
-      statements: 0,
+      branches: 40,
+      functions: 50,
+      lines: 50,
+      statements: 50,
+    },
+    // Higher thresholds for critical middleware
+    './src/middleware/auth.ts': {
+      branches: 60,
+      functions: 60,
+      lines: 60,
+      statements: 60,
+    },
+    './src/middleware/validation.ts': {
+      branches: 60,
+      functions: 60,
+      lines: 60,
+      statements: 60,
     },
   },
 
