@@ -143,7 +143,7 @@ src/
 ├── app/              # Next.js 14 App Router pages and layouts
 ├── components/       # React components organized by feature (all have index.ts)
 │   ├── ui/          # Reusable UI components (Button, Modal, Input, etc.)
-│   ├── graph/       # D3.js knowledge graph (KnowledgeGraph, GraphControls, etc.)
+│   ├── graph/       # D3.js knowledge graph (KnowledgeGraph, GraphControls, ReasoningPathOverlay, etc.)
 │   ├── claims/      # Claim management components
 │   ├── search/      # Search UI (UniversalSearchBar, SearchResults, etc.)
 │   └── collaboration/ # Real-time (CollaborativeEditor, LiveCursors, etc.)
