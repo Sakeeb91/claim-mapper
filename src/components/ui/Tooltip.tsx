@@ -24,6 +24,14 @@ const sideStyles: Record<TooltipSide, string> = {
   right: 'left-full ml-2',
 };
 
+// Animation styles based on side (slide in from opposite direction)
+const animationStyles: Record<TooltipSide, string> = {
+  top: 'animate-in fade-in-0 slide-in-from-bottom-2',
+  bottom: 'animate-in fade-in-0 slide-in-from-top-2',
+  left: 'animate-in fade-in-0 slide-in-from-right-2',
+  right: 'animate-in fade-in-0 slide-in-from-left-2',
+};
+
 const alignStyles: Record<TooltipSide, Record<TooltipAlign, string>> = {
   top: {
     start: 'left-0',
@@ -93,9 +101,10 @@ export function Tooltip({
           role="tooltip"
           aria-hidden={!isVisible}
           className={cn(
-            'absolute z-50 px-3 py-2 text-sm bg-popover text-popover-foreground rounded-md shadow-md border border-border whitespace-nowrap',
+            'absolute z-50 px-3 py-2 text-sm bg-popover text-popover-foreground rounded-md shadow-md border border-border whitespace-nowrap duration-200',
             sideStyles[side],
             alignStyles[side][align],
+            animationStyles[side],
             className
           )}
           style={offsetStyle}
