@@ -7,6 +7,7 @@ export interface AppError extends Error {
   statusCode?: number;
   code?: string;
   isOperational?: boolean;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   details?: any;
 }
 
@@ -14,7 +15,8 @@ class ErrorHandler {
   private isDevelopment = process.env.NODE_ENV === 'development';
 
   // Main error handling middleware
-  handle = (err: AppError, req: Request, res: Response, next: NextFunction): void => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  handle = (err: AppError, req: Request, res: Response, _next: NextFunction): void => {
     let error = { ...err };
     error.message = err.message;
 
@@ -22,6 +24,7 @@ class ErrorHandler {
     this.logError(err, req);
 
     // Handle specific error types
+    /* eslint-disable @typescript-eslint/no-explicit-any */
     if (err.name === 'CastError') {
       error = this.handleCastError(err as any);
     } else if (err.name === 'ValidationError') {
@@ -35,6 +38,7 @@ class ErrorHandler {
     } else if (err.name === 'MulterError') {
       error = this.handleMulterError(err as any);
     }
+    /* eslint-enable @typescript-eslint/no-explicit-any */
 
     // Set default error if not set
     if (!error.statusCode) {

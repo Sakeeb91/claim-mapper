@@ -11,6 +11,7 @@ declare global {
   namespace Express {
     interface Request {
       user?: IUser;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       project?: any;
     }
   }
@@ -334,6 +335,7 @@ class AuthMiddleware {
       }
 
       // Verify refresh token
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const decoded = jwt.verify(refreshToken, this.jwtSecret) as any;
       
       if (decoded.type !== 'refresh') {
@@ -395,6 +397,7 @@ class AuthMiddleware {
       
       if (token) {
         // Add token to blacklist with remaining TTL
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const decoded = jwt.decode(token) as any;
         const remainingTTL = decoded.exp - Math.floor(Date.now() / 1000);
         
